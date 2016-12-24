@@ -1,31 +1,36 @@
 // ==UserScript==
 // @name           Virtonomica: управление предприятиями
 // @namespace      virtonomica
-// @version 	   1.59
+// @version 	   1.60
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // ==/UserScript==
 
+// ненужная функция
+var getSizeHtml = function(size) {
+    var out = "<div>";
+    for (var i = 0; i < size; i++) {
+        out += "<div class=tchk >&nbsp;</div>";
+        if (i == 2)
+            out += "<div style='clear:both'></div>";
+    }
+
+    out += "</div>";
+    return out;
+};
+
 var run = function ()
 {
-
     var win = (typeof (unsafeWindow) != 'undefined' ? unsafeWindow : top.window);
-    $ = win.$;
+    $ = win.$;  // походу дергаем jquery из окна типо он уже должен быть
 
-    // поиск эффективности и подсевтка красным всего что не 100%
-    $("td.prod").each(function ()
-    {
-        // эффективность
-        ef = parseInt($(this).text());
-        if (ef < 100)
-        {
-            $(this).css("color", 'red');
-        }
-    });
+    // текущая ссылка
+    var url = /^https:\/\/virtonomic[as]\.(\w+)\/\w+\//.exec(location.href)[0];
 
-    function getStyle()
-    {
+
+    // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
+    var getStyle = function() {
         var out = "<style>";
         out += ".tchk {";
         out += "padding: 0px; background: #D8D8D8; float:left; height: 6px; width: 6px; margin: 1px;";
@@ -35,37 +40,34 @@ var run = function ()
         out += "}";
         out += "</style>";
         return out;
-    }
+    };
 
-    function getSizeHtml(size)
-    {
-        var out = "<div>";
-        for (var i = 0; i < size; i++)
-        {
-            out += "<div class=tchk >&nbsp;</div>";
-            if (i == 2) out += "<div style='clear:both'></div>";
-        }
 
-        out += "</div>";
-
-        return out;
-    }
+    // поиск эффективности и подсевтка красным всего что не 100%
+    //
+    $("td.prod")
+        .each(function() {
+            // эффективность
+            var ef = parseInt($(this).text());
+            if (ef < 100)
+                $(this).css("color", 'red');
+        });
+    
 
     // сокращенный размер для размеров подразделений
+    //
     $("table.unit-top").append(getStyle());
-    /*
-       $("td.size").each(function(){
-        $(this).html( getSizeHtml( $("img", this).length) );
-       });
-    */
     var title = $("div.field_title").eq(3);
     //console.log( title.text() );
     title.html(title.html().replace("Размер", "Р.")).attr('title', 'размер подраздления (от 1 до 6)');
 
+
     // Перекрашиваем заголовок
     //$("th").css('background', 'none repeat scroll 0 0 #CED8F6').css('color', 'grey');
 
+
     // Перемещаем создать подразделение в одну строку с типа подразделений
+    //
     var type_toolbar = $("td.u-l");
     //var el = type_toolbar.parent().next();
     var el = $("img.img_button").parent();
@@ -79,26 +81,21 @@ var run = function ()
     //$("a", el).parent().hide();
     el.hide();
 
-
-
-
-    var url = /^https:\/\/virtonomic[as]\.(\w+)\/\w+\//.exec(location.href)[0];
+    //
+    // Отработка фильтров
+    //
 
     // Список с ячейками, содержащими названия подразделений
     var list = $('td.info');
 
-    // убрать надпись Рабочих мест, размер склада и прочее идущее на второй строке под названием.
-    list.each(function ()
-    {
-        //console.log( $(this).html() );
-        var str = $(this).html();
-        var n = str.indexOf('<br>');
-        if (n == -1) return;
-        str = str.substr(0, n);
-        $(this).html(str);
+    // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
+    list.each(function() {
+        $(this).children().not("a").remove();
     });
 
-    // добавить опций в фильтр по эффективности
+
+    // фильтрация по эффективности
+    //
     var input_ef = $('<select>')
             .append('<option value=-1>Все</option>')
             .append('<option value=10>< 100%</option>')
@@ -132,33 +129,27 @@ var run = function ()
 
                     // заметки
                     var find_notes = 0;
-                    //if (($(this).parent().next().prop("class") == "u-z") ||
-                    //     ($(this).parent().next().prop("class") == "u-z ozz")
-                    //   )
-                    //{
-                    //    find_notes = 1;
-                    //}
-                    if ($(this).parent().next("tr.unit_comment"))
+                    if (($(this).parent().next().prop("class") == "u-z") ||
+                         ($(this).parent().next().prop("class") == "u-z ozz")
+                       )
+                    {
                         find_notes = 1;
-
-                    if(find == -1)
+                    }
+                    if (find == -1)
                     {
                         $(this).parent().hide();
                         if (find_notes == 1) $(this).parent().next().hide();
                     } else
                     {
                         $(this).parent().show();
-                        find_count++;
+                        find_count++
                         if (find_notes == 1) $(this).parent().next().show();
                     }
 
 
                 });
-
-                if (find_count == 0)
-                    $("#ef_info").html("&nbsp;");
-                else
-                    $("#ef_info").html("(" + find_count + ")");
+                if (find_count == 0) $("#ef_info").html("&nbsp;");
+                else $("#ef_info").html("(" + find_count + ")");
             });
 
 
@@ -182,7 +173,8 @@ var run = function ()
 
     var container = $("td.u-l").parent().parent();
 
-    // фильтр по названию
+    // фильтрация по тексту
+    // 
     var input = $('<input>').attr({ type: 'text', value: '' }).change(function ()
     {
 
@@ -200,23 +192,22 @@ var run = function ()
             }
             // заметки
             var find_notes = 0;
-            if ($(this).parent().next("tr.unit_comment"))
+            if (($(this).parent().next().prop("class") == "u-z") ||
+                 ($(this).parent().next().prop("class") == "u-z ozz")
+               )
+            {
                 find_notes = 1;
-
+            }
             // применить фильтр
             if ($(this).text().search(needle) == -1)
             {
                 $(this).parent().hide();
-
-                if (find_notes == 1)
-                    $(this).parent().next().hide();
+                if (find_notes == 1) $(this).parent().next().hide();
             } else
             {
                 $(this).parent().show();
                 find_count++;
-
-                if (find_notes == 1)
-                    $(this).parent().next().show();
+                if (find_notes == 1) $(this).parent().next().show();
             }
 
         });
@@ -246,16 +237,18 @@ var run = function ()
         alert(out);
     });
 
+
     // фильтр по регионам
+    //
     var flags = $("td.geo");
     var list_region = new Object();
     var list_flags = new Object();
 
+    // идем по всем строкам юнитов, считаем число юнитов по каждому региону для вывода
     for (i = 0; i < flags.length; i++)
     {
         var reg = flags.eq(i).attr('title');
         //console.log(reg);		
-
         if (list_region[reg] != null)
             list_region[reg]++;
         else
@@ -264,8 +257,30 @@ var run = function ()
         list_flags[reg] = flags.eq(i).attr('class').replace('geo', 'geocombo');
     }
 
+    // сортировка объекта как строки
+    function sortObj(arr)
+    {
+        // Setup Arrays
+        var sortedKeys = new Array();
+        var sortedObj = {};
+
+        // Separate keys and sort them
+        for (var i in arr)
+            sortedKeys.push(i);
+
+        sortedKeys.sort();
+
+        // Reconstruct sorted obj based on keys
+        for (var i in sortedKeys)
+            sortedObj[sortedKeys[i]] = arr[sortedKeys[i]];
+
+        return sortedObj;
+    }
+
+    // сортировка регионов в алфавитном порядке
     list_region = sortObj(list_region);
 
+    // отфильтровать по регионам
     var Filter_region = $(" <select style='max-width:140px;'>").append('<option value=0>&nbsp;</option>').change(function ()
     {
         search = $(this).val();
@@ -280,24 +295,30 @@ var run = function ()
             }
             var reg = $.trim($(this).attr('title'));
             //console.log( reg + "[" + search +"]");
-
             // применить фильтр
             if (reg.search(search) == -1)
+            {
                 $(this).parent().hide();
-            else
+            } else
+            {
                 $(this).parent().show();
+            }
         });
     });
 
     for (name in list_region)
     {
         str = '<option class="' + list_flags[name] + '" value="' + name + '">' + name;
-        if (list_region[name] > 1) str += ' (' + list_region[name] + ')';
+        if (list_region[name] > 1)
+            str += ' (' + list_region[name] + ')';
+
         str += '</option>';
         Filter_region.append(str);
     }
 
+
     // Фильтр по городу
+    //
     var input_city = $('<input>').attr({ type: 'text', value: '' }).change(function ()
     {
         var needle = new RegExp('^\\s*' + input_city.val(), 'i');
@@ -314,8 +335,9 @@ var run = function ()
             }
             // применить фильтр
             if ($(this).text().search(needle) == -1)
+            {
                 $(this).parent().hide();
-            else
+            } else
             {
                 $(this).parent().show();
                 find_count++;
@@ -327,6 +349,9 @@ var run = function ()
         });
     });
 
+
+
+    // рисуем фильтры на странице
     var ext_panel = $("#extension_panel");
     if (ext_panel.length == 0)
     {
@@ -334,38 +359,20 @@ var run = function ()
         var panel = "<div style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'  id=extension_panel></div>";
         container.append("<tr><td>" + panel);
     }
-    $("#extension_panel").append(Filter_region);
-    $("#extension_panel").append(" Город: ").append("<span id=city_info>&nbsp;</span> ").append(input_city);
 
-    $("#extension_panel").append(" Название: ").append("<span id=find_info>&nbsp;</span> ").append(input).append("&nbsp;")
-    .append('Эффективность: ').append("<span id=ef_info>&nbsp;</span> ").append(input_ef);
+    $("#extension_panel")
+        .append(Filter_region)
+        .append(" Город: ").append("<span id=city_info>&nbsp;</span> ").append(input_city)
+        .append(" Название: ").append("<span id=find_info>&nbsp;</span> ").append(input).append("&nbsp;")
+        .append(" Эффективность: ").append("<span id=ef_info>&nbsp;</span> ").append(input_ef);
+
     // Не забыть убрать
-    $("#extension_panel").append("&nbsp;").append(input_id);
+    //$("#extension_panel").append("&nbsp;").append(input_id);
     $("#extension_panel").show();
 };
 
-// сортировка объекта как строки
-function sortObj(arr)
-{
-    // Setup Arrays
-    var sortedKeys = new Array();
-    var sortedObj = {};
 
-    // Separate keys and sort them
-    for (var i in arr)
-    {
-        sortedKeys.push(i);
-    }
-    sortedKeys.sort();
-
-    // Reconstruct sorted obj based on keys
-    for (var i in sortedKeys)
-    {
-        sortedObj[sortedKeys[i]] = arr[sortedKeys[i]];
-    }
-    return sortedObj;
-}
-
+// добавить скрипт на страницу
 if (window.top == window)
 {
     var script = document.createElement("script");
