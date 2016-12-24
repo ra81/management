@@ -128,28 +128,30 @@ var run = function ()
                     }
 
                     // заметки
-                    var find_notes = 0;
-                    if (($(this).parent().next().prop("class") == "u-z") ||
-                         ($(this).parent().next().prop("class") == "u-z ozz")
-                       )
-                    {
-                        find_notes = 1;
-                    }
+                    var hasNote = false;
+                    if ($(this).parent().next("tr.unit_comment").length > 0)
+                        hasNote = true;
+
                     if (find == -1)
                     {
                         $(this).parent().hide();
-                        if (find_notes == 1) $(this).parent().next().hide();
+                        if (hasNote)
+                            $(this).parent().next().hide();
                     } else
                     {
                         $(this).parent().show();
                         find_count++
-                        if (find_notes == 1) $(this).parent().next().show();
+                        if (hasNote)
+                            $(this).parent().next().show();
                     }
 
 
                 });
-                if (find_count == 0) $("#ef_info").html("&nbsp;");
-                else $("#ef_info").html("(" + find_count + ")");
+
+                if (find_count == 0)
+                    $("#ef_info").html("&nbsp;");
+                else
+                    $("#ef_info").html("(" + find_count + ")");
             });
 
 
@@ -177,7 +179,6 @@ var run = function ()
     // 
     var input = $('<input>').attr({ type: 'text', value: '' }).change(function ()
     {
-
         //alert( list.length );
         var needle = new RegExp('^\\s*' + input.val(), 'i');
 
@@ -190,29 +191,32 @@ var run = function ()
                 $(this).parent().show();
                 return;
             }
+
             // заметки
-            var find_notes = 0;
-            if (($(this).parent().next().prop("class") == "u-z") ||
-                 ($(this).parent().next().prop("class") == "u-z ozz")
-               )
-            {
-                find_notes = 1;
-            }
+            // заметки
+            var hasNote = false;
+            if ($(this).parent().next("tr.unit_comment").length > 0)
+                hasNote = true;
+
             // применить фильтр
             if ($(this).text().search(needle) == -1)
             {
                 $(this).parent().hide();
-                if (find_notes == 1) $(this).parent().next().hide();
+                if (hasNote)
+                    $(this).parent().next().hide();
             } else
             {
                 $(this).parent().show();
                 find_count++;
-                if (find_notes == 1) $(this).parent().next().show();
+                if (hasNote)
+                    $(this).parent().next().show();
             }
-
         });
-        if (find_count == 0) $("#find_info").html("&nbsp;");
-        else $("#find_info").html("(" + find_count + ")");
+
+        if (find_count == 0)
+            $("#find_info").html("&nbsp;");
+        else
+            $("#find_info").html("(" + find_count + ")");
     });
 
     // Поиск id
@@ -293,15 +297,25 @@ var run = function ()
                 $(this).parent().show();
                 return;
             }
+
+            // заметки
+            var hasNote = false;
+            if ($(this).parent().next("tr.unit_comment").length > 0)
+                hasNote = true;
+
             var reg = $.trim($(this).attr('title'));
             //console.log( reg + "[" + search +"]");
             // применить фильтр
             if (reg.search(search) == -1)
             {
                 $(this).parent().hide();
+                if (hasNote)
+                    $(this).parent().next().hide();
             } else
             {
                 $(this).parent().show();
+                if (hasNote)
+                    $(this).parent().next().show();
             }
         });
     });
@@ -333,18 +347,30 @@ var run = function ()
                 $(this).parent().show();
                 return;
             }
+
+            // заметки
+            var hasNote = false;
+            if ($(this).parent().next("tr.unit_comment").length > 0)
+                hasNote = true;
+
             // применить фильтр
             if ($(this).text().search(needle) == -1)
             {
                 $(this).parent().hide();
+                if (hasNote)
+                    $(this).parent().next().hide();
             } else
             {
-                $(this).parent().show();
                 find_count++;
+                $(this).parent().show();
+                if (hasNote)
+                    $(this).parent().next().show();
             }
 
-            if (find_count == 0) $("#city_info").html("&nbsp;");
-            else $("#city_info").html("(" + find_count + ")");
+            if (find_count == 0)
+                $("#city_info").html("&nbsp;");
+            else
+                $("#city_info").html("(" + find_count + ")");
 
         });
     });
