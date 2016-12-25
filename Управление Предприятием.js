@@ -1,47 +1,47 @@
-// ==UserScript==
-// @name           Virtonomica: управление предприятиями
+п»ї// ==UserScript==
+// @name           Virtonomica: СѓРїСЂР°РІР»РµРЅРёРµ РїСЂРµРґРїСЂРёСЏС‚РёСЏРјРё
 // @namespace      virtonomica
 // @version 	   1.60
-// @description    Добавление нового функционала к управлению предприятиями
+// @description    Р”РѕР±Р°РІР»РµРЅРёРµ РЅРѕРІРѕРіРѕ С„СѓРЅРєС†РёРѕРЅР°Р»Р° Рє СѓРїСЂР°РІР»РµРЅРёСЋ РїСЂРµРґРїСЂРёСЏС‚РёСЏРјРё
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // ==/UserScript==
 
-//debugger;
+//debugger;Р°
 
 var run = function ()
 {
     var win = (typeof (unsafeWindow) != 'undefined' ? unsafeWindow : top.window);
-    $ = win.$;  // походу дергаем jquery из окна типо он уже должен быть
+    $ = win.$;  // РїРѕС…РѕРґСѓ РґРµСЂРіР°РµРј jquery РёР· РѕРєРЅР° С‚РёРїРѕ РѕРЅ СѓР¶Рµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ
 
-    // текущая ссылка
+    // С‚РµРєСѓС‰Р°СЏ СЃСЃС‹Р»РєР°
     var url = /^https:\/\/virtonomic[as]\.(\w+)\/\w+\//.exec(location.href)[0];
 
     var unitTop = $("#mainContent > table.unit-top");
     var unitList = $("#mainContent > table.unit-list-2014");
 
-    // поиск эффективности и подсветка красным всего что не 100%
+    // РїРѕРёСЃРє СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚Рё Рё РїРѕРґСЃРІРµС‚РєР° РєСЂР°СЃРЅС‹Рј РІСЃРµРіРѕ С‡С‚Рѕ РЅРµ 100%
     efficiencyColor(unitList);
 
-    // клик на эффективность
+    // РєР»РёРє РЅР° СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ
     efficiencyClick(unitList);
 
-    // сокращенный размер для размеров подразделений
+    // СЃРѕРєСЂР°С‰РµРЅРЅС‹Р№ СЂР°Р·РјРµСЂ РґР»СЏ СЂР°Р·РјРµСЂРѕРІ РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№
     resizeSizeColumn(unitList);
 
-    // Перемещаем создать подразделение в одну строку с типа подразделений
+    // РџРµСЂРµРјРµС‰Р°РµРј СЃРѕР·РґР°С‚СЊ РїРѕРґСЂР°Р·РґРµР»РµРЅРёРµ РІ РѕРґРЅСѓ СЃС‚СЂРѕРєСѓ СЃ С‚РёРїР° РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№
     moveCreateBtn(unitTop);
 
 
-    // создаем панельку, и шоутайм.
+    // СЃРѕР·РґР°РµРј РїР°РЅРµР»СЊРєСѓ, Рё С€РѕСѓС‚Р°Р№Рј.
     var pane = getFilterPanel(unitTop, unitList);
     pane.show();
 
 
 
-    // Функции
+    // Р¤СѓРЅРєС†РёРё
     //
-    // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
+    // С„РѕСЂРјРёСЂСѓРµС‚ СЃС‚РёР»СЊ РґР»СЏ СЃС‚РѕР»Р±С†Р° СЃ СЂР°Р·РјРµСЂРѕРј РїРѕРґСЂР°Р·РґРµР»РµРЅРёСЏ С‡С‚РѕР±С‹ РѕРЅ РјРµРЅСЊС€Рµ Р·Р°РЅРёРјР°Р» РјРµСЃС‚Р°
     function getStyle()
     {
         var out = "<style>";
@@ -55,7 +55,7 @@ var run = function ()
         return out;
     }
 
-    // ненужная функция
+    // РЅРµРЅСѓР¶РЅР°СЏ С„СѓРЅРєС†РёСЏ
     function getSizeHtml(size)
     {
         var out = "<div>";
@@ -69,7 +69,7 @@ var run = function ()
         return out;
     }
 
-    // подсветка красным эффективности меньше 100
+    // РїРѕРґСЃРІРµС‚РєР° РєСЂР°СЃРЅС‹Рј СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚Рё РјРµРЅСЊС€Рµ 100
     function efficiencyColor(unitTable)
     {
         unitTable.find("td.prod").each(function ()
@@ -80,38 +80,38 @@ var run = function ()
         });
     }
 
-    // сокращенный размер для размеров подразделений
+    // СЃРѕРєСЂР°С‰РµРЅРЅС‹Р№ СЂР°Р·РјРµСЂ РґР»СЏ СЂР°Р·РјРµСЂРѕРІ РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№
     function resizeSizeColumn(unitTable)
     {
         var sizeColumnHeader = unitTable.find("div.field_title")[3];
         //console.log(sizeColumnHeader);
-        var newHeader = $(sizeColumnHeader).html().replace("Размер", "Р.");
+        var newHeader = $(sizeColumnHeader).html().replace("Р Р°Р·РјРµСЂ", "Р .");
         $(sizeColumnHeader).html(newHeader);
-        sizeColumnHeader.title = "размер подраздления (от 1 до 6)";
+        sizeColumnHeader.title = "СЂР°Р·РјРµСЂ РїРѕРґСЂР°Р·РґР»РµРЅРёСЏ (РѕС‚ 1 РґРѕ 6)";
     }
 
-    // перемещает кнопку создания нового юнита чтобы она занимала меньше места
+    // РїРµСЂРµРјРµС‰Р°РµС‚ РєРЅРѕРїРєСѓ СЃРѕР·РґР°РЅРёСЏ РЅРѕРІРѕРіРѕ СЋРЅРёС‚Р° С‡С‚РѕР±С‹ РѕРЅР° Р·Р°РЅРёРјР°Р»Р° РјРµРЅСЊС€Рµ РјРµСЃС‚Р°
     function moveCreateBtn(unitTop)
     {
-        // скроем большую кнопку
+        // СЃРєСЂРѕРµРј Р±РѕР»СЊС€СѓСЋ РєРЅРѕРїРєСѓ
         var btn = $(unitTop).find("a.btn-success");
         btn.hide();
 
-        // забираем картинку с кнопки и создаем новую миникнопку
+        // Р·Р°Р±РёСЂР°РµРј РєР°СЂС‚РёРЅРєСѓ СЃ РєРЅРѕРїРєРё Рё СЃРѕР·РґР°РµРј РЅРѕРІСѓСЋ РјРёРЅРёРєРЅРѕРїРєСѓ
         var btnImg = btn.find("img.img_button");
-        var newBtn = "<a href=" + btn.attr('href') + " title='Создать подразделение'><img src=" + btnImg.attr('src') + "></a>";
+        var newBtn = "<a href=" + btn.attr('href') + " title='РЎРѕР·РґР°С‚СЊ РїРѕРґСЂР°Р·РґРµР»РµРЅРёРµ'><img src=" + btnImg.attr('src') + "></a>";
 
-        // вставляем кнопку на панель
+        // РІСЃС‚Р°РІР»СЏРµРј РєРЅРѕРїРєСѓ РЅР° РїР°РЅРµР»СЊ
         var typeToolbar = $(unitTop).find("td.u-l");
         typeToolbar.append(newBtn);
     }
 
-    // клик на эффективность
+    // РєР»РёРє РЅР° СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ
     function efficiencyClick(unitTable)
     {
         var eff = unitTable.find("td.prod");
         eff.css("cursor", "pointer");
-        eff.prop("title", "Узнать прогноз эффективности");
+        eff.prop("title", "РЈР·РЅР°С‚СЊ РїСЂРѕРіРЅРѕР· СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚Рё");
         eff.click(function ()
         {
             var td = $(this);
@@ -122,7 +122,7 @@ var run = function ()
             td.empty().append($("<img>").attr({ "src": "http://www.pixic.ru/i/50V1E3S444O3G076.gif", "height": 16, "width": 16 }).css('padding-right', '20px'));
             $.get(newEffUrl, function (data)
             {
-                var percent = $('td:contains(Эффективность работы) + td td:eq(1)', data).text().replace('%', '').trim();
+                var percent = $('td:contains(Р­С„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ СЂР°Р±РѕС‚С‹) + td td:eq(1)', data).text().replace('%', '').trim();
                 td.html(percent + "<i>%</i>");
 
                 var color = (percent == '100.00' ? 'green' : 'red');
@@ -134,7 +134,7 @@ var run = function ()
 
     }
 
-    // делает фильтрацию
+    // РґРµР»Р°РµС‚ С„РёР»СЊС‚СЂР°С†РёСЋ
     function DoFilter(unitTable, searchPanel) {
         //searchPanel = $("#filterPanel");
         //console.log("1");
@@ -155,23 +155,23 @@ var run = function ()
             var row = $(this);
             //console.log(row)
 
-            // регион и город
+            // СЂРµРіРёРѕРЅ Рё РіРѕСЂРѕРґ
             var geoTd = row.children("td.geo")[0];
             //console.log(geoTd);
             var reg = geoTd.title;
             var twn = geoTd.textContent.trim();
 
-            // текущая эффективность
+            // С‚РµРєСѓС‰Р°СЏ СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ
             var eff = parseFloat(row.children("td.prod").text());
 
-            // название юнита
+            // РЅР°Р·РІР°РЅРёРµ СЋРЅРёС‚Р°
             var name = row.children("td.info").children("a").text().toLowerCase();
             //console.log(reg);
             //console.log(twn);
             //console.log(eff);
             //console.log(name);
 
-            // фильтрация
+            // С„РёР»СЊС‚СЂР°С†РёСЏ
             var show = true;
 
             if (region != "all" && reg != region)
@@ -227,7 +227,7 @@ var run = function ()
     function getFilterPanel(unitTop, unitTable) {
         var container = $(unitTop).find("tbody");
 
-        // если панели еще нет, то добавить её
+        // РµСЃР»Рё РїР°РЅРµР»Рё РµС‰Рµ РЅРµС‚, С‚Рѕ РґРѕР±Р°РІРёС‚СЊ РµС‘
         var panel = $(unitTop).find("#filterPanel");
         if (panel.length == 0) {
             var panelHtml = "<div id='filterPanel' style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'></div>";
@@ -235,7 +235,7 @@ var run = function ()
             panel = $(unitTop).find("#filterPanel");
         }
 
-        // фильтр по регионам
+        // С„РёР»СЊС‚СЂ РїРѕ СЂРµРіРёРѕРЅР°Рј
         //
         var regionList = getRegions(unitTable);
         var regionFilter = $(" <select id='regionFilter' style='max-width:140px;'>")
@@ -249,7 +249,7 @@ var run = function ()
             regionFilter.append(html);
         });
 
-        // фильтр по городам
+        // С„РёР»СЊС‚СЂ РїРѕ РіРѕСЂРѕРґР°Рј
         //
         var townList = getTowns(unitTable);
         var townFilter = $("<select id='townFilter' style='max-width:140px;'>");
@@ -264,22 +264,22 @@ var run = function ()
             townFilter.append(html);
         });
 
-        // фильтр по эффективности
+        // С„РёР»СЊС‚СЂ РїРѕ СЌС„С„РµРєС‚РёРІРЅРѕСЃС‚Рё
         // 
         var efficiencyFilter = $("<select id='efficiencyFilter' style='max-width:140px;'>")
-            .append('<option value=-1>Все</option>')
+            .append('<option value=-1>Р’СЃРµ</option>')
             .append('<option value=10>< 100%</option>')
             .append('<option value=100>100%</option>')
             .append('<option value=0>0%</option>');
 
-        // текстовый фильтр
+        // С‚РµРєСЃС‚РѕРІС‹Р№ С„РёР»СЊС‚СЂ
         //
         var textFilter = $('<input id="textFilter"></input>').attr({ type: 'text', value: '' });
 
 
-        // события смены фильтров
+        // СЃРѕР±С‹С‚РёСЏ СЃРјРµРЅС‹ С„РёР»СЊС‚СЂРѕРІ
         //
-        // смена региона сбрасывает выбор города в all
+        // СЃРјРµРЅР° СЂРµРіРёРѕРЅР° СЃР±СЂР°СЃС‹РІР°РµС‚ РІС‹Р±РѕСЂ РіРѕСЂРѕРґР° РІ all
         regionFilter.change(function ()
         {
             var select = $(this);
@@ -287,7 +287,7 @@ var run = function ()
             DoFilter(unitTable, panel);
         });
 
-        // на смене города выставим регион в тот, который соответствует городу.
+        // РЅР° СЃРјРµРЅРµ РіРѕСЂРѕРґР° РІС‹СЃС‚Р°РІРёРј СЂРµРіРёРѕРЅ РІ С‚РѕС‚, РєРѕС‚РѕСЂС‹Р№ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РіРѕСЂРѕРґСѓ.
         townFilter.change(function () {
             var select = $(this);
             var reg = select.children().eq(select[0].selectedIndex).get(0).text;
@@ -297,7 +297,7 @@ var run = function ()
             DoFilter(unitTable, panel);
         });
 
-        // просто фильтруем.
+        // РїСЂРѕСЃС‚Рѕ С„РёР»СЊС‚СЂСѓРµРј.
         textFilter.change(function() {
             //var text = this.value;
             //console.log(text);
@@ -314,26 +314,26 @@ var run = function ()
         });
 
 
-        // дополняем панель до конца элементами
+        // РґРѕРїРѕР»РЅСЏРµРј РїР°РЅРµР»СЊ РґРѕ РєРѕРЅС†Р° СЌР»РµРјРµРЅС‚Р°РјРё
         //
-        panel.append("<span>Регион: </span>").append(regionFilter);
-        panel.append("<span> Город: </span>").append(townFilter);
-        panel.append("<span> Текст: </span>").append(textFilter);
-        panel.append("<span> Эффективность: </span>").append(efficiencyFilter);
+        panel.append("<span>Р РµРіРёРѕРЅ: </span>").append(regionFilter);
+        panel.append("<span> Р“РѕСЂРѕРґ: </span>").append(townFilter);
+        panel.append("<span> РўРµРєСЃС‚: </span>").append(textFilter);
+        panel.append("<span> Р­С„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ: </span>").append(efficiencyFilter);
 
         return panel;
     }
 
-    // вернет регионы сортированные с числом юнитов в каждом {Region: "", UnitCount: 1}
+    // РІРµСЂРЅРµС‚ СЂРµРіРёРѕРЅС‹ СЃРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Рµ СЃ С‡РёСЃР»РѕРј СЋРЅРёС‚РѕРІ РІ РєР°Р¶РґРѕРј {Region: "", UnitCount: 1}
     function getRegions(unitTable)
     {
-        // тащим все ячейки с названиями городов. так же и регион в ней в титле
+        // С‚Р°С‰РёРј РІСЃРµ СЏС‡РµР№РєРё СЃ РЅР°Р·РІР°РЅРёСЏРјРё РіРѕСЂРѕРґРѕРІ. С‚Р°Рє Р¶Рµ Рё СЂРµРіРёРѕРЅ РІ РЅРµР№ РІ С‚РёС‚Р»Рµ
         var items = $(unitTable).find("td.geo");
 
         var regions = {};
         //var options = {};
 
-        // идем по всем строкам юнитов, считаем число юнитов по каждому региону для вывода
+        // РёРґРµРј РїРѕ РІСЃРµРј СЃС‚СЂРѕРєР°Рј СЋРЅРёС‚РѕРІ, СЃС‡РёС‚Р°РµРј С‡РёСЃР»Рѕ СЋРЅРёС‚РѕРІ РїРѕ РєР°Р¶РґРѕРјСѓ СЂРµРіРёРѕРЅСѓ РґР»СЏ РІС‹РІРѕРґР°
         for (i = 0; i < items.length; i++) {
             var reg = items.eq(i).attr("title");
             
@@ -366,13 +366,13 @@ var run = function ()
 
     function getTowns(unitTable)
     {
-        // тащим все ячейки с названиями городов. так же и регион в ней в титле
+        // С‚Р°С‰РёРј РІСЃРµ СЏС‡РµР№РєРё СЃ РЅР°Р·РІР°РЅРёСЏРјРё РіРѕСЂРѕРґРѕРІ. С‚Р°Рє Р¶Рµ Рё СЂРµРіРёРѕРЅ РІ РЅРµР№ РІ С‚РёС‚Р»Рµ
         var items = $(unitTable).find("td.geo");
 
         var towns = {};
         //var options = {};
 
-        // идем по всем строкам юнитов, считаем число юнитов по каждому региону для вывода
+        // РёРґРµРј РїРѕ РІСЃРµРј СЃС‚СЂРѕРєР°Рј СЋРЅРёС‚РѕРІ, СЃС‡РёС‚Р°РµРј С‡РёСЃР»Рѕ СЋРЅРёС‚РѕРІ РїРѕ РєР°Р¶РґРѕРјСѓ СЂРµРіРёРѕРЅСѓ РґР»СЏ РІС‹РІРѕРґР°
         for (i = 0; i < items.length; i++) {
             var t = items.eq(i).html().trim();
             var reg = items.eq(i).attr("title").trim();
@@ -407,7 +407,7 @@ var run = function ()
 };
 
 
-// добавить скрипт на страницу
+// РґРѕР±Р°РІРёС‚СЊ СЃРєСЂРёРїС‚ РЅР° СЃС‚СЂР°РЅРёС†Сѓ
 if (window.top == window)
 {
     var script = document.createElement("script");
