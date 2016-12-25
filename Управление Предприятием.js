@@ -473,7 +473,7 @@ var run = function ()
             var twn = geoTd.textContent.trim();
 
             // текущая эффективность
-            var eff = parseFloat(row.children("td.prod").val());
+            var eff = parseFloat(row.children("td.prod").text());
 
             // название юнита
             var name = row.children("td.info").children("a").text().toLowerCase();
@@ -497,12 +497,12 @@ var run = function ()
             switch (efficiency) {
                 case '10':
                 {
-                    if (eff == 0 || ef == 100)
+                    if (eff == 0 || eff == 100)
                         show = false;
                     break;
                 }
                 case '100': {
-                    if (ef < 100)
+                    if (eff < 100)
                         show = false;
                     break;
                 }
@@ -515,9 +515,9 @@ var run = function ()
                     break;
             }
 
-            console.log(row);
-            console.log(name);
-            console.log(show);
+            //console.log(row);
+            //console.log(name);
+            //console.log(show);
             var commentRow = row.next("tr.unit_comment");
 
             if (show) {
