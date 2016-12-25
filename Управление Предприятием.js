@@ -117,7 +117,7 @@ var run = function ()
             var td = $(this);
             var row = $(this).parent();
             var unitId = row.find("td.unit_id").text();
-            var newEffUrl = url + 'window/unit/productivity_info/' + unitId
+            var newEffUrl = url + 'window/unit/productivity_info/' + unitId;
 
             td.empty().append($("<img>").attr({ "src": "http://www.pixic.ru/i/50V1E3S444O3G076.gif", "height": 16, "width": 16 }).css('padding-right', '20px'));
             $.get(newEffUrl, function (data)
@@ -238,7 +238,7 @@ var run = function ()
         // фильтр по регионам
         //
         var regionList = getRegions(unitTable);
-        var regionFilter = $(" <select id='regionFilter' style='max-width:140px;'>")
+        var regionFilter = $(" <select id='regionFilter' style='max-width:140px;'>");
         regionFilter.append('<option value="all", label="all">&nbsp;</option>');
         regionList.forEach(function(item, i, arr) {
             var html = '<option value="' + item.Region + '">' + item.Region;
@@ -346,9 +346,9 @@ var run = function ()
         }
 
         var regArray = [];
-        Object.values(regions).forEach(function (item, i, arr) {
-            regArray.push(item);
-        })
+        Object.values(regions).forEach(function(item, i, arr) {
+                regArray.push(item);
+            });
         
         regArray.sort(function (a, b)
         {
@@ -386,10 +386,9 @@ var run = function ()
         }
 
         var regArray = [];
-        Object.values(towns).forEach(function (item, i, arr)
-        {
-            regArray.push(item);
-        })
+        Object.values(towns).forEach(function(item, i, arr) {
+                regArray.push(item);
+            });
 
         regArray.sort(function (a, b)
         {
