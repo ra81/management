@@ -7,18 +7,6 @@
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // ==/UserScript==
 
-// ненужная функция
-var getSizeHtml = function(size) {
-    var out = "<div>";
-    for (var i = 0; i < size; i++) {
-        out += "<div class=tchk >&nbsp;</div>";
-        if (i == 2)
-            out += "<div style='clear:both'></div>";
-    }
-
-    out += "</div>";
-    return out;
-};
 
 var run = function ()
 {
@@ -28,71 +16,30 @@ var run = function ()
     // текущая ссылка
     var url = /^https:\/\/virtonomic[as]\.(\w+)\/\w+\//.exec(location.href)[0];
 
+    var unitTop = $("#mainContent > table.unit-top");
+    var unitList = $("#mainContent > table.unit-list-2014");
 
-    // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
-    var getStyle = function() {
-        var out = "<style>";
-        out += ".tchk {";
-        out += "padding: 0px; background: #D8D8D8; float:left; height: 6px; width: 6px; margin: 1px;";
-        out += "}";
-        out += ".geocombo {";
-        out += "background-position: 2px 50%; background-repeat: no-repeat; padding-left: 20px;";
-        out += "}";
-        out += "</style>";
-        return out;
-    };
+    // поиск эффективности и подсветка красным всего что не 100%
+    efficiencyColor(unitList);
 
-
-    // поиск эффективности и подсевтка красным всего что не 100%
-    //
-    $("td.prod")
-        .each(function() {
-            // эффективность
-            var ef = parseInt($(this).text());
-            if (ef < 100)
-                $(this).css("color", 'red');
-        });
-    
+    // клик на эффективность
+    efficiencyClick(unitList);
 
     // сокращенный размер для размеров подразделений
-    //
-    $("table.unit-top").append(getStyle());
-    var title = $("div.field_title").eq(3);
-    //console.log( title.text() );
-    title.html(title.html().replace("Размер", "Р.")).attr('title', 'размер подраздления (от 1 до 6)');
-
-
-    // Перекрашиваем заголовок
-    //$("th").css('background', 'none repeat scroll 0 0 #CED8F6').css('color', 'grey');
-
+    resizeSizeColumn(unitList);
 
     // Перемещаем создать подразделение в одну строку с типа подразделений
-    //
-    var type_toolbar = $("td.u-l");
-    //var el = type_toolbar.parent().next();
-    var el = $("img.img_button").parent();
-    //console.log( "len = " + el.length);
-    //console.log( el.html() );
-    var ttt = $("img", el);
-    //console.log( ttt.attr('src') );
-    var create_img = "<a href=" + el.attr('href') + " title='Создать подразделение'><img src=" + ttt.attr('src') + "></a>";
-    //console.log( create_img );
-    type_toolbar.append(create_img);
-    //$("a", el).parent().hide();
-    el.hide();
+    moveCreateBtn(unitTop);
 
     //
     // Отработка фильтров
     //
 
     // Список с ячейками, содержащими названия подразделений
-    var list = $('td.info');
+    var unitNameList = unitList.find("td.info");
 
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
-    list.each(function() {
-        $(this).children().not("a").remove();
-    });
-
+    unitNameList.each(function () { $(this).children().not("a").remove(); });
 
     // фильтрация по эффективности
     //
@@ -102,6 +49,8 @@ var run = function ()
             .append('<option value=100>100%</option>')
             .append('<option value=0>0%</option>').change(function ()
             {
+                localStorage.efficiency = $(this).val();
+
                 var find_count = 0;
                 list.each(function ()
                 {
@@ -154,31 +103,14 @@ var run = function ()
                     $("#ef_info").html("(" + find_count + ")");
             });
 
-
-    // Клик по эффективности
-    $(list).next().next().next().next().css('cursor', 'pointer').prop('title', 'Узнать прогноз эффективности').click(function ()
-    {
-        var td = $(this);
-        td.empty().append($('<img>').attr({ 'src': 'http://s3.devels.info/load.gif', 'height': 16, 'width': 16 }).css('padding-right', '20px'));
-
-        var el = $("td.unit_id", $(this).parent());
-        var id = el.text();
-        $.get(url + 'window/unit/productivity_info/' + id, function (data)
-        {
-            var percent = $('td:contains(Эффективность работы) + td td:eq(1)', data).text().replace('%', '').trim();
-            var color = (percent == '100.00' ? 'green' : 'red');
-            var html = percent + '<i>%</i>';
-
-            td.css('color', color).html(html);
-        });
-    });
-
     var container = $("td.u-l").parent().parent();
 
     // фильтрация по тексту
     // 
     var input = $('<input>').attr({ type: 'text', value: '' }).change(function ()
     {
+        localStorage.text = $(this).val();
+
         //alert( list.length );
         var needle = new RegExp('^\\s*' + input.val(), 'i');
 
@@ -192,7 +124,6 @@ var run = function ()
                 return;
             }
 
-            // заметки
             // заметки
             var hasNote = false;
             if ($(this).parent().next("tr.unit_comment").length > 0)
@@ -287,6 +218,9 @@ var run = function ()
     // отфильтровать по регионам
     var Filter_region = $(" <select style='max-width:140px;'>").append('<option value=0>&nbsp;</option>').change(function ()
     {
+        localStorage.region = $(this).val();
+
+
         search = $(this).val();
 
         var el = $("td.geo").each(function ()
@@ -335,7 +269,10 @@ var run = function ()
     //
     var input_city = $('<input>').attr({ type: 'text', value: '' }).change(function ()
     {
+        localStorage.town = $(this).val();
+
         var needle = new RegExp('^\\s*' + input_city.val(), 'i');
+        //var needle = new RegExp('^\\s*' + $(this).val(), 'i');
         console.log(needle);
 
         var find_count = 0;
@@ -394,7 +331,116 @@ var run = function ()
 
     // Не забыть убрать
     //$("#extension_panel").append("&nbsp;").append(input_id);
+    var goBtn = $("<button>Go!</button>").click(function () {
+        var region = localStorage.region;
+        var town = localStorage.town;
+        var eff = localStorage.efficiency;
+        var text = localStorage.text;
+        console.log(region);
+        console.log(town);
+        console.log(eff);
+        console.log(text);
+    });
+
+    $("#extension_panel").append(goBtn);
     $("#extension_panel").show();
+
+
+    // Функции
+    //
+    // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
+    function getStyle()
+    {
+        var out = "<style>";
+        out += ".tchk {";
+        out += "padding: 0px; background: #D8D8D8; float:left; height: 6px; width: 6px; margin: 1px;";
+        out += "}";
+        out += ".geocombo {";
+        out += "background-position: 2px 50%; background-repeat: no-repeat; padding-left: 20px;";
+        out += "}";
+        out += "</style>";
+        return out;
+    }
+
+    // ненужная функция
+    function getSizeHtml(size)
+    {
+        var out = "<div>";
+        for (var i = 0; i < size; i++) {
+            out += "<div class=tchk >&nbsp;</div>";
+            if (i == 2)
+                out += "<div style='clear:both'></div>";
+        }
+
+        out += "</div>";
+        return out;
+    }
+
+    // подсветка красным эффективности меньше 100
+    function efficiencyColor(unitTable)
+    {
+        unitTable.children().find("td.prod").each(function ()
+        {
+            var ef = parseInt($(this).text());
+            if (ef < 100)
+                $(this).css("color", 'red');
+        });
+    }
+
+    // сокращенный размер для размеров подразделений
+    function resizeSizeColumn(unitTable)
+    {
+        var sizeColumnHeader = unitTable.find("div.field_title")[3];
+        //console.log(sizeColumnHeader);
+        var newHeader = $(sizeColumnHeader).html().replace("Размер", "Р.");
+        $(sizeColumnHeader).html(newHeader);
+        sizeColumnHeader.title = "размер подраздления (от 1 до 6)";
+    }
+
+    // перемещает кнопку создания нового юнита чтобы она занимала меньше места
+    function moveCreateBtn(unitTop)
+    {
+        // скроем большую кнопку
+        var btn = $(unitTop).find("a.btn-success");
+        btn.hide();
+
+        // забираем картинку с кнопки и создаем новую миникнопку
+        var btnImg = btn.find("img.img_button");
+        var newBtn = "<a href=" + btn.attr('href') + " title='Создать подразделение'><img src=" + btnImg.attr('src') + "></a>";
+
+        // вставляем кнопку на панель
+        var typeToolbar = $(unitTop).find("td.u-l");
+        typeToolbar.append(newBtn);
+    }
+
+    // клик на эффективность
+    function efficiencyClick(unitTable)
+    {
+        var eff = unitTable.find("td.prod");
+        eff.css("cursor", "pointer");
+        eff.prop("title", "Узнать прогноз эффективности");
+        eff.click(function ()
+        {
+            var td = $(this);
+            var row = $(this).parent();
+            var unitId = row.find("td.unit_id").text();
+            var newEffUrl = url + 'window/unit/productivity_info/' + unitId
+
+            td.empty().append($("<img>").attr({ "src": "http://www.pixic.ru/i/50V1E3S444O3G076.gif", "height": 16, "width": 16 }).css('padding-right', '20px'));
+            $.get(newEffUrl, function (data)
+            {
+                var percent = $('td:contains(Эффективность работы) + td td:eq(1)', data).text().replace('%', '').trim();
+                td.html(percent + "<i>%</i>");
+
+                var color = (percent == '100.00' ? 'green' : 'red');
+                td.css('color', color);
+            });
+
+            //console.log(unitId);
+        });
+
+    }
+
 };
 
 
