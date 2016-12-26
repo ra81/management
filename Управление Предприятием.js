@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: управление предприятиями
 // @namespace      virtonomica
-// @version 	   1.60
+// @version 	   1.61
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
@@ -32,6 +32,8 @@ var run = function ()
     // Перемещаем создать подразделение в одну строку с типа подразделений
     moveCreateBtn(unitTop);
 
+    // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
+    unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
 
     // создаем панельку, и шоутайм.
     var pane = getFilterPanel(unitTop, unitList);
@@ -239,24 +241,24 @@ var run = function ()
         //
         var regionList = getRegions(unitTable);
         var regionFilter = $(" <select id='regionFilter' style='max-width:140px;'>");
-        regionFilter.append('<option value="all", label="all">&nbsp;</option>');
+        regionFilter.append('<option value="all", label="all">all</option>');
         regionList.forEach(function(item, i, arr) {
-            var html = '<option value="' + item.Region + '">' + item.Region;
-            if (item.UnitCount > 1)
-                html += ' (' + item.UnitCount + ')';
+            var lbl = item.UnitCount > 1 ? `label="${item.Region} (${item.UnitCount})"` : `label="${item.Region}"`;
+            var val = `value="${item.Region}"`;
+            var txt = item.Region;
 
-            html += '</option>';
+            var html = `<option ${lbl} ${val}>${txt}</option>`;
             regionFilter.append(html);
         });
 
         // фильтр по городам
         //
+        // в label запихнем то что отображается, в value собственно Город, а в текст сунем регион.
         var townList = getTowns(unitTable);
         var townFilter = $("<select id='townFilter' style='max-width:140px;'>");
-        townFilter.append('<option value="all", label="all">&nbsp;</option>');
+        townFilter.append('<option value="all", label="all">all</option>');
         townList.forEach(function (item, i, arr) {
             var lbl = item.UnitCount > 1 ? `label="${item.Town} (${item.UnitCount})"` : `label="${item.Town}"`;
-
             var val = `value="${item.Town}"`;
             var txt = item.Region;
 
@@ -282,7 +284,6 @@ var run = function ()
         // смена региона сбрасывает выбор города в all
         regionFilter.change(function ()
         {
-            var select = $(this);
             townFilter.val("all");
             DoFilter(unitTable, panel);
         });
@@ -291,9 +292,12 @@ var run = function ()
         townFilter.change(function () {
             var select = $(this);
             var reg = select.children().eq(select[0].selectedIndex).get(0).text;
+            var twn = select.val();
+            if (twn == "all")
+                reg = "all";
+            
             //console.log(reg);
             regionFilter.val(reg);
-
             DoFilter(unitTable, panel);
         });
 
