@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: управление предприятиями
-// @namespace      virtonomica
-// @version 	   1.61
+// @namespace      https://github.com/ra81/management
+// @version 	   1.62
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
