@@ -146,6 +146,7 @@ var run = function ()
         var town = searchPanel.find("#townFilter").val();
         var text = searchPanel.find("#textFilter").val().toLowerCase();
         var efficiency = searchPanel.find("#efficiencyFilter").val();
+        var goodsUrl = searchPanel.find("#goodsFilter").val();
 
         //console.log("2");
         //console.log(region);
@@ -168,6 +169,10 @@ var run = function ()
 
             // название юнита
             var name = row.children("td.info").children("a").text().toLowerCase();
+
+            // список торгуемых товаров. сразу брать их тега нельзя, он разворачивает ссылки полностью. А jquery берет то что в теге
+            var goods = row.children("td.spec").children("img").map(function (i, el) { return $(el).attr("src") }).get();
+            
             //console.log(reg);
             //console.log(twn);
             //console.log(eff);
@@ -183,6 +188,9 @@ var run = function ()
                 show = false;
 
             if (name.match(text) == null)
+                show = false;
+
+            if (goodsUrl != "all" && goods.indexOf(goodsUrl) < 0)
                 show = false;
 
             switch (efficiency) {
@@ -278,6 +286,21 @@ var run = function ()
         //
         var textFilter = $('<input id="textFilter"></input>').attr({ type: 'text', value: '' });
 
+        // фильтр по товарам
+        //
+        var goodsList = getGoods(unitTable);
+        var goodsFilter = $("<select id='goodsFilter' style='max-width:140px;'>");
+        goodsFilter.append('<option value="all", label="all">all</option>');
+        goodsList.forEach(function (item, i, arr)
+        {
+            var lbl = item.UnitCount > 1 ? `label="${item.Name} (${item.UnitCount})"` : `label="${item.Name}"`;
+            var val = `value="${item.Url}"`;
+            var txt = item.Name;
+
+            var html = `<option ${lbl} ${val}>${txt}</option>`;
+            goodsFilter.append(html);
+        });
+
 
         // события смены фильтров
         //
@@ -317,12 +340,20 @@ var run = function ()
             DoFilter(unitTable, panel);
         });
 
+        goodsFilter.change(function ()
+        {
+            //var text = this.value;
+            //console.log(text);
+
+            DoFilter(unitTable, panel);
+        });
 
         // дополняем панель до конца элементами
         //
         panel.append("<span>Регион: </span>").append(regionFilter);
         panel.append("<span> Город: </span>").append(townFilter);
         panel.append("<span> Текст: </span>").append(textFilter);
+        panel.append("<span> Товары: </span>").append(goodsFilter);
         panel.append("<span> Эффективность: </span>").append(efficiencyFilter);
 
         return panel;
@@ -400,6 +431,52 @@ var run = function ()
                 return 1;
 
             if (a.Town < b.Town)
+                return -1;
+
+            return 0;
+        });
+
+        return regArray;
+    }
+
+    function getGoods(unitTable)
+    {
+        // тащим все ячейки с картинками
+        var items = $(unitTable).find("td.spec");
+
+        var goods = {};
+        //var options = {};
+
+        // идем по всем строкам юнитов, считаем число юнитов по каждому товару
+        for (i = 0; i < items.length; i++) {
+
+            var imgs = items.eq(i).children("img");     // все картинки специализации
+
+            // перебираем все товары юнита. 2 одинаковых быть не может, поэтому сразу ++ если попалось совпадение
+            for (var n = 0; n < imgs.length; n++) {
+                var imgUrl = imgs.eq(n).attr("src");
+                var html = imgs.get(n);
+                var name = html.title;
+
+                if (goods[imgUrl] != null)
+                    goods[imgUrl].UnitCount++;
+                else
+                    goods[imgUrl] = { Name: name, Url: imgUrl, Html: html, UnitCount: 1 };
+            }
+        }
+        //console.log(goods);
+        var regArray = [];
+        Object.values(goods).forEach(function (item, i, arr)
+        {
+            regArray.push(item);
+        });
+
+        regArray.sort(function (a, b)
+        {
+            if (a.Name > b.Name)
+                return 1;
+
+            if (a.Name < b.Name)
                 return -1;
 
             return 0;
