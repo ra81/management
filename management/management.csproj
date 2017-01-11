@@ -25,7 +25,6 @@
     <Content Include="app.css" />
     <Content Include="index.html" />
     <None Include="Scripts\jquery-3.1.1.intellisense.js" />
-    <Content Include="readme.txt" />
     <Content Include="Scripts\jquery-3.1.1.js" />
     <Content Include="Scripts\jquery-3.1.1.min.js" />
     <Content Include="Scripts\jquery-3.1.1.slim.js" />
