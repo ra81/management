@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.64
+// @version 	   1.65
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // ==/UserScript==
+;
 function run() {
     var $ = jQuery;
     var realm = getRealm();
@@ -14,6 +15,7 @@ function run() {
     var $rows = $unitList.find("td.unit_id").closest("tr");
     var units = parseUnits();
     var townRegDict = makeRegTownDict(units);
+    var inProcess = { Count: 0, Finally: function () { } }; // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
     // поиск эффективности и подсветка красным всего что не 100%
     efficiencyColor(units);
     // клик на эффективность
@@ -73,55 +75,12 @@ function run() {
     }
     // делает фильтрацию
     function doFilter($panel) {
-        //searchPanel = $("#filterPanel");
-        //console.log("1");
-        //console.log(searchPanel);
-        //console.log(unitTable);
-        var region = $panel.find("#regionFilter").val();
-        var town = $panel.find("#townFilter").val();
-        var text = $panel.find("#textFilter").val().toLowerCase();
-        var efficiency = $panel.find("#efficiencyFilter").val();
-        var goodUrl = $panel.find("#goodsFilter").val();
-        var problemUrl = $panel.find("#problemsFilter").val();
+        var op = getFilterOptions($panel);
+        var filterMask = filter(units, op);
         for (var i = 0; i < units.length; i++) {
             var unit = units[i];
-            // фильтрация
-            var show = true;
-            if (region != "all" && unit.Region != region)
-                show = false;
-            if (town != "all" && unit.Town != town)
-                show = false;
-            if (unit.$row.text().match(new RegExp(text, "i")) == null)
-                show = false;
-            if (goodUrl != "all" && !unit.Goods.some(function (e) { return e.Url === goodUrl; }))
-                show = false;
-            if (problemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === problemUrl; }))
-                show = false;
-            switch (efficiency) {
-                case '10':
-                    {
-                        if (unit.Efficiency == 0 || unit.Efficiency == 100)
-                            show = false;
-                        break;
-                    }
-                case '100': {
-                    if (unit.Efficiency < 100)
-                        show = false;
-                    break;
-                }
-                case '0': {
-                    if (unit.Efficiency > 0)
-                        show = false;
-                    break;
-                }
-                case '-1':
-                    break;
-            }
-            //console.log(row);
-            //console.log(name);
-            //console.log(show);
             var $commentRow = unit.$row.next("tr.unit_comment");
-            if (show) {
+            if (filterMask[i]) {
                 unit.$row.show();
                 if ($commentRow.length > 0)
                     $commentRow.show();
@@ -148,7 +107,7 @@ function run() {
         }
         // если панели еще нет, то добавить её
         var panelHtml = "<div id='filterPanel' style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'></div>";
-        var panel = $(panelHtml);
+        var $panel = $(panelHtml);
         // фильтр по регионам
         var regionFilter = $("<select id='regionFilter' style='max-width:100px;'>");
         var regions = makeKeyValCount(units, function (el) { return el.Region; });
@@ -171,12 +130,14 @@ function run() {
             .append('<option value=0>0%</option>');
         // текстовый фильтр
         var textFilter = $('<input id="textFilter" style="max- width:100px;"></input>').attr({ type: 'text', value: '' });
+        // запрос сразу всех данных по эффективности
+        var effButton = $('<input type=button id=getEff value="GO">').css("color", "red");
         // события смены фильтров
         //
         // смена региона сбрасывает выбор города в all
         regionFilter.change(function () {
             townFilter.val("all");
-            doFilter(panel);
+            doFilter($panel);
         });
         // на смене города выставим регион в тот, который соответствует городу.
         townFilter.change(function () {
@@ -185,39 +146,65 @@ function run() {
             var reg = twn === "all" ? "all" : townRegDict[twn];
             //console.log(reg);
             regionFilter.val(reg);
-            doFilter(panel);
+            doFilter($panel);
         });
         // просто фильтруем.
         textFilter.change(function () {
             //var text = this.value;
             //console.log(text);
-            doFilter(panel);
+            doFilter($panel);
         });
         efficiencyFilter.change(function () {
             //var text = this.value;
             //console.log(text);
-            doFilter(panel);
+            doFilter($panel);
         });
         goodsFilter.change(function () {
             //var text = this.value;
             //console.log(text);
-            doFilter(panel);
+            doFilter($panel);
         });
         problemsFilter.change(function () {
             //var text = this.value;
             //console.log(text);
-            doFilter(panel);
+            doFilter($panel);
+        });
+        effButton.click(function () {
+            var $btn = $(this);
+            $btn.prop('disabled', true).css("color", "gray");
+            // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
+            var filterMask = filter(units, getFilterOptions($panel));
+            filterMask.forEach(function (e, i, arr) { return e && inProcess.Count++; });
+            inProcess.Finally = function () {
+                // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
+                inProcess = { Count: 0, Finally: function () { } };
+                $btn.prop('disabled', false).css("color", "red");
+            };
+            // заводим клики только для фильтранутых
+            console.log(inProcess.Count + " units started.");
+            units.forEach(function (e, i, arr) { return filterMask[i] && e.$eff.trigger("click"); });
         });
         // дополняем панель до конца элементами
         //
-        panel.append("<span>Регион: </span>").append(regionFilter);
-        panel.append("<span> Город: </span>").append(townFilter);
-        panel.append("<span> Текст: </span>").append(textFilter);
-        panel.append("<span> Товары: </span>").append(goodsFilter);
-        panel.append("<span> Проблемы: </span>").append(problemsFilter);
-        panel.append("<span> Эфф: </span>").append(efficiencyFilter);
-        $unitTop.append("<tr><td id='filter' colspan=3></td></tr>").find("#filter").append(panel);
-        panel.show();
+        $panel.append("<span>Регион: </span>").append(regionFilter);
+        $panel.append("<span> Город: </span>").append(townFilter);
+        $panel.append("<span> Текст: </span>").append(textFilter);
+        $panel.append("<span> Товары: </span>").append(goodsFilter);
+        $panel.append("<span> Проблемы: </span>").append(problemsFilter);
+        $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
+        $panel.append("<span> </span>").append(effButton);
+        $unitTop.append("<tr><td id='filter' colspan=3></td></tr>").find("#filter").append($panel);
+        $panel.show();
+    }
+    function getFilterOptions($panel) {
+        return {
+            Region: $panel.find("#regionFilter").val(),
+            Town: $panel.find("#townFilter").val(),
+            TextRx: $panel.find("#textFilter").val().toLowerCase(),
+            Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
+            GoodUrl: $panel.find("#goodsFilter").val(),
+            ProblemUrl: $panel.find("#problemsFilter").val()
+        };
     }
     // клик на эффективность
     function efficiencyClick(units) {
@@ -238,6 +225,8 @@ function run() {
                 url: url,
                 type: "GET",
                 success: function (html, status, xhr) {
+                    if (inProcess.Count <= 0)
+                        throw new Error("somehow we got 0 in process counter");
                     // парсим страничку с данными эффективности
                     var $html = $(html);
                     var percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
@@ -246,6 +235,9 @@ function run() {
                     var color = (percent == '100.00' ? 'green' : 'red');
                     $td.css('color', color);
                     $td.removeClass("processing");
+                    inProcess.Count--;
+                    if (inProcess.Count === 0)
+                        inProcess.Finally();
                 },
                 error: function (xhr, status, error) {
                     //Resend ajax
@@ -297,6 +289,46 @@ function run() {
         }
         return units;
     }
+}
+// возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
+function filter(units, options) {
+    var res = [];
+    for (var i = 0; i < units.length; i++) {
+        var unit = units[i];
+        res[i] = false;
+        if (options.Region != "all" && unit.Region != options.Region)
+            continue;
+        if (options.Town != "all" && unit.Town != options.Town)
+            continue;
+        if (unit.$row.text().match(new RegExp(options.TextRx, "i")) == null)
+            continue;
+        if (options.GoodUrl != "all" && !unit.Goods.some(function (e) { return e.Url === options.GoodUrl; }))
+            continue;
+        if (options.ProblemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === options.ProblemUrl; }))
+            continue;
+        switch (options.Efficiency) {
+            case 10:
+                {
+                    if (unit.Efficiency == 0 || unit.Efficiency == 100)
+                        continue;
+                    break;
+                }
+            case 100: {
+                if (unit.Efficiency < 100)
+                    continue;
+                break;
+            }
+            case 0: {
+                if (unit.Efficiency > 0)
+                    continue;
+                break;
+            }
+            case -1:
+                break;
+        }
+        res[i] = true;
+    }
+    return res;
 }
 function getRealm() {
     // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
