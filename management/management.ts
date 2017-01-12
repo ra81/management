@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.63
+// @version 	   1.64
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
@@ -313,41 +313,37 @@ function run() {
                 return false;
 
             let subid = numberfy($td.closest("tr").find("td.unit_id").text());
+            if (subid < 0)
+                throw new Error("subid not found for: " + $td);
+
             let url = `/${realm}/window/unit/productivity_info/${subid}`;
 
             $td.empty().append($("<img>").attr({ src: "http://www.pixic.ru/i/50V1E3S444O3G076.gif", height: 16, width: 16 }).css('padding-right', '20px'));
             $td.addClass("processing");
-            $.get(url, function (html) {
-                let $html = $(html);
-                let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
-                $td.html(percent + "<i>%</i>");
+            $.ajax({
+                url: url,
+                type: "GET",
 
-                let color = (percent == '100.00' ? 'green' : 'red');
-                $td.css('color', color);
-                $td.removeClass("processing");
-            });
+                success: function (html, status, xhr) {
+                    // парсим страничку с данными эффективности
+                    let $html = $(html);
+                    let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
+                    $td.html(percent + "<i>%</i>");
+
+                    // выставляем значение в ячейку
+                    let color = (percent == '100.00' ? 'green' : 'red');
+                    $td.css('color', color);
+                    $td.removeClass("processing");
+                },
+                error: function (this: any, xhr: any, status: any, error: any) {
+                    //Resend ajax
+                    var _this = this;
+                    setTimeout(() => $.ajax(_this), 3000);
+                }
+            });	
 
             return false;
         });
-
-
-        function onClick (subid: number, $td: JQuery) {
-
-            let effUrl = `/${realm}/window/unit/productivity_info/${subid}`;
-            let _$td = $td;
-
-            return () => {
-                _$td.empty().append($("<img>").attr({ src: "http://www.pixic.ru/i/50V1E3S444O3G076.gif", height: 16, width: 16 }).css('padding-right', '20px'));
-                $.get(effUrl, function (html) {
-                    let $html = $(html);
-                    let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
-                    _$td.html(percent + "<i>%</i>");
-
-                    let color = (percent == '100.00' ? 'green' : 'red');
-                    _$td.css('color', color);
-                });
-            }
-        }
     }
 
     function getGoods(units: TUnit[]) {
@@ -405,7 +401,7 @@ function run() {
 
         return units;
     }
-};
+}
 
 function getRealm(): string | null {
     // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
@@ -478,6 +474,6 @@ function numberfy(str: string): number {
         return parseFloat(str.replace(/[\s\$\%\©]/g, "")) || -1;
         //return parseFloat(String(variable).replace(/[\s\$\%\©]/g, "")) || 0; //- так сделано чтобы variable когда undef получалась строка "0"
     }
-};
+}
 
 $(document).ready(() => run());
