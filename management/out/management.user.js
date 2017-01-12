@@ -1,15 +1,21 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.65
+// @version 	   1.66
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // ==/UserScript==
-;
 function run() {
     var $ = jQuery;
     var realm = getRealm();
+    // закончить если мы не на той странице
+    var pathRx = new RegExp(/\/([a-zA-Z]+)\/main\/company\/view\/\d+(?:\/unit_list\/?)?$/ig);
+    if (pathRx.test(document.location.pathname) === false) {
+        console.log("management: not on unit list page.");
+        return;
+    }
+    // работа
     var $unitTop = $("#mainContent > table.unit-top");
     var $unitList = $("#mainContent > table.unit-list-2014");
     var $rows = $unitList.find("td.unit_id").closest("tr");
@@ -206,7 +212,6 @@ function run() {
             ProblemUrl: $panel.find("#problemsFilter").val()
         };
     }
-    // клик на эффективность
     function efficiencyClick(units) {
         var realm = getRealm();
         for (var i = 0; i < units.length; i++)

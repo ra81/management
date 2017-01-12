@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.65
+// @version 	   1.66
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
@@ -19,8 +19,8 @@ interface IUnit {
     Goods: TNameUrl[];
     Problems: TNameUrl[];
     Efficiency: number;
-    $eff: JQuery
-};
+    $eff: JQuery;
+}
 interface IFilterOptions {
     Region: string;
     Town: string;
@@ -38,6 +38,14 @@ function run() {
     let $ = jQuery;
     let realm = getRealm();
 
+    // закончить если мы не на той странице
+    let pathRx = new RegExp(/\/([a-zA-Z]+)\/main\/company\/view\/\d+(?:\/unit_list\/?)?$/ig);
+    if (pathRx.test(document.location.pathname) === false) {
+        console.log("management: not on unit list page.");
+        return;
+    }
+
+    // работа
     let $unitTop = $("#mainContent > table.unit-top")
     let $unitList = $("#mainContent > table.unit-list-2014");
     let $rows = $unitList.find("td.unit_id").closest("tr");
@@ -290,7 +298,6 @@ function run() {
         }
     }
 
-    // клик на эффективность
     function efficiencyClick(units: IUnit[]) {
 
         let realm = getRealm();

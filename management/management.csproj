@@ -73,7 +73,7 @@
     </VisualStudio>
   </ProjectExtensions>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <TypeScriptRemoveComments>false</TypeScriptRemoveComments>
+    <TypeScriptRemoveComments>False</TypeScriptRemoveComments>
     <TypeScriptSourceMap>true</TypeScriptSourceMap>
     <TypeScriptTarget>ES5</TypeScriptTarget>
     <TypeScriptJSXEmit>None</TypeScriptJSXEmit>
@@ -90,6 +90,7 @@
     <TypeScriptNoImplicitReturns>True</TypeScriptNoImplicitReturns>
     <TypeScriptNoImplicitThis>True</TypeScriptNoImplicitThis>
     <TypeScriptStrictNullChecks>True</TypeScriptStrictNullChecks>
+    <Optimize>true</Optimize>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <TypeScriptRemoveComments>true</TypeScriptRemoveComments>
