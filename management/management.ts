@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.67
+// @version 	   1.68
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @noframes
@@ -408,23 +408,19 @@ function filter(units: IUnit[], options: IFilterOptions) {
             continue;
 
         switch (options.Efficiency) {
-            case 10:
-                {
-                    if (unit.Efficiency == 0 || unit.Efficiency == 100)
-                        continue;
-                    break;
-                }
-            case 100: {
-                if (unit.Efficiency < 100)
-                    continue;
+            case 100: // 100
+                if (unit.Efficiency < 100) continue;
                 break;
-            }
-            case 0: {
-                if (unit.Efficiency > 0)
-                    continue;
+
+            case 10: // < 100
+                if (unit.Efficiency >= 100) continue;
                 break;
-            }
-            case -1:
+
+            case 0: // 0
+                if (unit.Efficiency > 0) continue;
+                break;
+
+            case -1: // all
                 break;
         }
 
@@ -531,8 +527,10 @@ function numberfy(str: string): number {
         String(str) === 'Nicht beschr.') {
         return Number.POSITIVE_INFINITY;
     } else {
-        return parseFloat(str.replace(/[\s\$\%\©]/g, "")) || -1;
-        //return parseFloat(String(variable).replace(/[\s\$\%\©]/g, "")) || 0; //- так сделано чтобы variable когда undef получалась строка "0"
+        // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
+        // не будет эксепшнов
+        let n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
+        return isNaN(n) ?  -1 : n;
     }
 }
 

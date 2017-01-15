@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.67
+// @version 	   1.68
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @noframes
@@ -287,22 +287,18 @@ function filter(units, options) {
         if (options.ProblemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === options.ProblemUrl; }))
             continue;
         switch (options.Efficiency) {
-            case 10:
-                {
-                    if (unit.Efficiency == 0 || unit.Efficiency == 100)
-                        continue;
-                    break;
-                }
-            case 100: {
+            case 100:
                 if (unit.Efficiency < 100)
                     continue;
                 break;
-            }
-            case 0: {
+            case 10:
+                if (unit.Efficiency >= 100)
+                    continue;
+                break;
+            case 0:
                 if (unit.Efficiency > 0)
                     continue;
                 break;
-            }
             case -1:
                 break;
         }
@@ -386,7 +382,10 @@ function numberfy(str) {
         return Number.POSITIVE_INFINITY;
     }
     else {
-        return parseFloat(str.replace(/[\s\$\%\©]/g, "")) || -1;
+        // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
+        // не будет эксепшнов
+        var n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
+        return isNaN(n) ? -1 : n;
     }
 }
 $(document).ready(function () { return run(); });
