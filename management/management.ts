@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.68
+// @version 	   1.69
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @noframes
@@ -288,7 +288,12 @@ function run() {
 
             // заводим клики только для фильтранутых
             console.log(`${inProcess.Count} units started.`);
-            units.forEach((e, i, arr) => filterMask[i] && e.$eff.trigger("click"));
+            units.forEach((e, i, arr) => {
+                if (filterMask[i]) {
+                    e.$eff.addClass("auto");    // класс говорит что эффективность будет автозапрошена
+                    e.$eff.trigger("click");
+                }
+            });
         });
 
         // дополняем панель до конца элементами
@@ -333,7 +338,8 @@ function run() {
 
                 success: function (html, status, xhr) {
 
-                    if (inProcess.Count <= 0)
+                    // если запрос в авторежиме
+                    if ($td.hasClass("auto") && inProcess.Count <= 0)
                         throw new Error("somehow we got 0 in process counter");
 
                     // парсим страничку с данными эффективности
@@ -346,9 +352,14 @@ function run() {
                     $td.css('color', color);
                     $td.removeClass("processing");
 
-                    inProcess.Count--;
-                    if (inProcess.Count === 0)
-                        inProcess.Finally();
+                    // если запрос в авторежиме
+                    if ($td.hasClass("auto")) {
+                        $td.removeClass("auto");
+
+                        inProcess.Count--;
+                        if (inProcess.Count === 0)
+                            inProcess.Finally();
+                    }
                 },
                 error: function (this: any, xhr: any, status: any, error: any) {
                     //Resend ajax
