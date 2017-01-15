@@ -1,23 +1,30 @@
 ﻿// ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.66
+// @version 	   1.67
 // @description    Добавление нового функционала к управлению предприятиями
-// @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
+// @noframes
 // ==/UserScript==
 
 //debugger;а
 
-type TNameValueCount = { Name: string, Value:string, Count: number };
-type TNameUrl = { Name: string, Url: string };
+interface INameValueCount {
+    Name: string;
+    Value: string
+    Count: number;
+}
+interface INameUrl {
+    Name: string;
+    Url: string;
+}
 interface IUnit {
     $row: JQuery;
     Id: number;
     Region: string;
     Town: string;
-    Goods: TNameUrl[];
-    Problems: TNameUrl[];
+    Goods: INameUrl[];
+    Problems: INameUrl[];
     Efficiency: number;
     $eff: JQuery;
 }
@@ -29,7 +36,6 @@ interface IFilterOptions {
     ProblemUrl: string;
     Efficiency: number;
 }
-
 interface IDictionary<T> {
     [key: string]: T;
 }
@@ -39,11 +45,11 @@ function run() {
     let realm = getRealm();
 
     // закончить если мы не на той странице
-    let pathRx = new RegExp(/\/([a-zA-Z]+)\/main\/company\/view\/\d+(?:\/unit_list\/?)?$/ig);
-    if (pathRx.test(document.location.pathname) === false) {
+    if ($("table.unit-list-2014").length === 0 || $("table.unit-top").length === 0) {
         console.log("management: not on unit list page.");
         return;
     }
+
 
     // работа
     let $unitTop = $("#mainContent > table.unit-top")
@@ -70,9 +76,9 @@ function run() {
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
 
     // создаем панельку, и шоутайм.
-    buildFilterPanel(units);
-    
-
+    let $panel = buildFilterPanel(units);
+    $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    $panel.show();
 
 
     // Функции
@@ -108,6 +114,12 @@ function run() {
 
     // перемещает кнопку создания нового юнита чтобы она занимала меньше места
     function moveCreateBtn() {
+
+        let typeToolbar = $unitTop.find("td.u-l");
+        // бывает что нет панели с кнопками юнитов, тогда оставим все как есть
+        if (typeToolbar.length === 0)
+            return;
+
         // скроем большую кнопку
         var btn = $unitTop.find("a.btn-success");
         btn.hide();
@@ -115,15 +127,7 @@ function run() {
         // забираем картинку с кнопки и создаем новую миникнопку
         var btnImg = btn.find("img.img_button");
         var newBtn = "<a href=" + btn.attr('href') + " title='Создать подразделение'><img src=" + btnImg.attr('src') + "></a>";
-
-        // вставляем кнопку на панель. Но бывает что панели нет, просто перенесем кнопку
-        let typeToolbar = $unitTop.find("td.u-l");
-        if (typeToolbar.length >= 0)
-            typeToolbar.append(newBtn);
-        else {
-            //$unitTop.find("tr").first().append(btn);
-            btn.show();
-        }
+        typeToolbar.append(newBtn);
     }
 
     // делает фильтрацию
@@ -150,7 +154,7 @@ function run() {
 
     function buildFilterPanel(units: IUnit[]) {
 
-        function buildOptions (items: TNameValueCount[]) {
+        function buildOptions (items: INameValueCount[]) {
             let optionsHtml = '<option value="all", label="all">all</option>';
             for (let i = 0; i < items.length; i++) {
                 let item = items[i];
@@ -283,19 +287,7 @@ function run() {
         $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
         $panel.append("<span> </span>").append(effButton);
 
-        $unitTop.append("<tr><td id='filter' colspan=3></td></tr>").find("#filter").append($panel);
-        $panel.show();
-    }
-
-    function getFilterOptions($panel: JQuery): IFilterOptions {
-        return {
-            Region: $panel.find("#regionFilter").val(),
-            Town: $panel.find("#townFilter").val(),
-            TextRx: $panel.find("#textFilter").val().toLowerCase(),
-            Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
-            GoodUrl: $panel.find("#goodsFilter").val(),
-            ProblemUrl: $panel.find("#problemsFilter").val()
-        }
+        return $panel;
     }
 
     function efficiencyClick(units: IUnit[]) {
@@ -353,24 +345,6 @@ function run() {
         });
     }
 
-    function getGoods(units: IUnit[]) {
-
-        let goods: TNameUrl[] = [];
-        for (let i = 0; i < units.length; i++)
-            goods.push.apply(goods, units[i].Goods);
-
-        return makeKeyValCount(goods, (el) => el.Name, (el) => el.Url);
-    }
-
-    function getProblems(units: IUnit[]) {
-
-        let problems: TNameUrl[] = [];
-        for (let i = 0; i < units.length; i++)
-            problems.push.apply(problems, units[i].Problems);
-
-        return makeKeyValCount(problems, (el) => el.Name, (el) => el.Url);
-    }
-
     function parseUnits(): IUnit[] {
 
         let units: IUnit[] = [];
@@ -383,13 +357,13 @@ function run() {
             let reg = $geo.attr("title").trim();
             let twn = $geo.text().trim();
 
-            let goods = $r.find("td.spec").find("img").map((i, e): TNameUrl => {
+            let goods = $r.find("td.spec").find("img").map((i, e): INameUrl => {
                 return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get() as any as TNameUrl[];
+            }).get() as any as INameUrl[];
 
-            let problems = $r.find("td.alerts").find("img").map((i, e): TNameUrl => {
+            let problems = $r.find("td.alerts").find("img").map((i, e): INameUrl => {
                 return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get() as any as TNameUrl[];
+            }).get() as any as INameUrl[];
 
             let $eff = $r.find("td.prod");
             let eff = numberfy($eff.clone().children().remove().end().text());
@@ -460,6 +434,35 @@ function filter(units: IUnit[], options: IFilterOptions) {
     return res;
 }
 
+function getFilterOptions($panel: JQuery): IFilterOptions {
+    return {
+        Region: $panel.find("#regionFilter").val(),
+        Town: $panel.find("#townFilter").val(),
+        TextRx: $panel.find("#textFilter").val().toLowerCase(),
+        Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
+        GoodUrl: $panel.find("#goodsFilter").val(),
+        ProblemUrl: $panel.find("#problemsFilter").val()
+    }
+}
+
+function getGoods(units: IUnit[]) {
+
+    let goods: INameUrl[] = [];
+    for (let i = 0; i < units.length; i++)
+        goods.push.apply(goods, units[i].Goods);
+
+    return makeKeyValCount(goods, (el) => el.Name, (el) => el.Url);
+}
+
+function getProblems(units: IUnit[]) {
+
+    let problems: INameUrl[] = [];
+    for (let i = 0; i < units.length; i++)
+        problems.push.apply(problems, units[i].Problems);
+
+    return makeKeyValCount(problems, (el) => el.Name, (el) => el.Url);
+}
+
 function getRealm(): string | null {
     // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
     // https://*virtonomic*.*/*/window/globalreport/marketing/by_trade_at_cities/*
@@ -473,7 +476,7 @@ function getRealm(): string | null {
 
 function makeKeyValCount<T>(items: T[], keySelector: (el: T) => string, valueSelector?: (el: T) => string) {
 
-    let res: IDictionary<TNameValueCount> = {};
+    let res: IDictionary<INameValueCount> = {};
     for (let i = 0; i < items.length; i++) {
         let key = keySelector(items[i]);
         let val = valueSelector ? valueSelector(items[i]) : key;
@@ -484,7 +487,7 @@ function makeKeyValCount<T>(items: T[], keySelector: (el: T) => string, valueSel
             res[key] = { Name: key, Value: val, Count: 1 };
     }
 
-    let resArray: TNameValueCount[] = [];
+    let resArray: INameValueCount[] = [];
     for (let key in res)
         resArray.push(res[key]);
 

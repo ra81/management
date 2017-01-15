@@ -1,17 +1,16 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.66
+// @version 	   1.67
 // @description    Добавление нового функционала к управлению предприятиями
-// @include        https://*virtonomic*.*/*/main/company/view/*/unit_list
 // @include        https://*virtonomic*.*/*/main/company/view/*
+// @noframes
 // ==/UserScript==
 function run() {
     var $ = jQuery;
     var realm = getRealm();
     // закончить если мы не на той странице
-    var pathRx = new RegExp(/\/([a-zA-Z]+)\/main\/company\/view\/\d+(?:\/unit_list\/?)?$/ig);
-    if (pathRx.test(document.location.pathname) === false) {
+    if ($("table.unit-list-2014").length === 0 || $("table.unit-top").length === 0) {
         console.log("management: not on unit list page.");
         return;
     }
@@ -33,7 +32,9 @@ function run() {
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
     // создаем панельку, и шоутайм.
-    buildFilterPanel(units);
+    var $panel = buildFilterPanel(units);
+    $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    $panel.show();
     // Функции
     //
     // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
@@ -64,20 +65,17 @@ function run() {
     }
     // перемещает кнопку создания нового юнита чтобы она занимала меньше места
     function moveCreateBtn() {
+        var typeToolbar = $unitTop.find("td.u-l");
+        // бывает что нет панели с кнопками юнитов, тогда оставим все как есть
+        if (typeToolbar.length === 0)
+            return;
         // скроем большую кнопку
         var btn = $unitTop.find("a.btn-success");
         btn.hide();
         // забираем картинку с кнопки и создаем новую миникнопку
         var btnImg = btn.find("img.img_button");
         var newBtn = "<a href=" + btn.attr('href') + " title='Создать подразделение'><img src=" + btnImg.attr('src') + "></a>";
-        // вставляем кнопку на панель. Но бывает что панели нет, просто перенесем кнопку
-        var typeToolbar = $unitTop.find("td.u-l");
-        if (typeToolbar.length >= 0)
-            typeToolbar.append(newBtn);
-        else {
-            //$unitTop.find("tr").first().append(btn);
-            btn.show();
-        }
+        typeToolbar.append(newBtn);
     }
     // делает фильтрацию
     function doFilter($panel) {
@@ -199,18 +197,7 @@ function run() {
         $panel.append("<span> Проблемы: </span>").append(problemsFilter);
         $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
         $panel.append("<span> </span>").append(effButton);
-        $unitTop.append("<tr><td id='filter' colspan=3></td></tr>").find("#filter").append($panel);
-        $panel.show();
-    }
-    function getFilterOptions($panel) {
-        return {
-            Region: $panel.find("#regionFilter").val(),
-            Town: $panel.find("#townFilter").val(),
-            TextRx: $panel.find("#textFilter").val().toLowerCase(),
-            Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
-            GoodUrl: $panel.find("#goodsFilter").val(),
-            ProblemUrl: $panel.find("#problemsFilter").val()
-        };
+        return $panel;
     }
     function efficiencyClick(units) {
         var realm = getRealm();
@@ -252,18 +239,6 @@ function run() {
             });
             return false;
         });
-    }
-    function getGoods(units) {
-        var goods = [];
-        for (var i = 0; i < units.length; i++)
-            goods.push.apply(goods, units[i].Goods);
-        return makeKeyValCount(goods, function (el) { return el.Name; }, function (el) { return el.Url; });
-    }
-    function getProblems(units) {
-        var problems = [];
-        for (var i = 0; i < units.length; i++)
-            problems.push.apply(problems, units[i].Problems);
-        return makeKeyValCount(problems, function (el) { return el.Name; }, function (el) { return el.Url; });
     }
     function parseUnits() {
         var units = [];
@@ -334,6 +309,28 @@ function filter(units, options) {
         res[i] = true;
     }
     return res;
+}
+function getFilterOptions($panel) {
+    return {
+        Region: $panel.find("#regionFilter").val(),
+        Town: $panel.find("#townFilter").val(),
+        TextRx: $panel.find("#textFilter").val().toLowerCase(),
+        Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
+        GoodUrl: $panel.find("#goodsFilter").val(),
+        ProblemUrl: $panel.find("#problemsFilter").val()
+    };
+}
+function getGoods(units) {
+    var goods = [];
+    for (var i = 0; i < units.length; i++)
+        goods.push.apply(goods, units[i].Goods);
+    return makeKeyValCount(goods, function (el) { return el.Name; }, function (el) { return el.Url; });
+}
+function getProblems(units) {
+    var problems = [];
+    for (var i = 0; i < units.length; i++)
+        problems.push.apply(problems, units[i].Problems);
+    return makeKeyValCount(problems, function (el) { return el.Name; }, function (el) { return el.Url; });
 }
 function getRealm() {
     // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
