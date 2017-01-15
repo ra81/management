@@ -39,45 +39,59 @@ interface IFilterOptions {
 interface IDictionary<T> {
     [key: string]: T;
 }
+enum Modes { none, self, other }
 
 function run() {
     let $ = jQuery;
     let realm = getRealm();
 
+    let mode = Modes.none;
+    let $unitTop = $("#mainContent > table.unit-top")
+    let $unitList = $("#mainContent > table.unit-list-2014");
+    let $imgOther = $("#mainContent img[src='/img/icon/add_2_clist.gif']");
+
+    if ($unitTop.length > 0 && $unitList.length > 0)
+        mode = Modes.self;
+
+    if ($unitList.length > 0 && $imgOther.length > 0)
+        mode = Modes.other;
+
     // закончить если мы не на той странице
-    if ($("table.unit-list-2014").length === 0 || $("table.unit-top").length === 0) {
+    if (mode === Modes.none) {
         console.log("management: not on unit list page.");
         return;
     }
 
-
     // работа
-    let $unitTop = $("#mainContent > table.unit-top")
-    let $unitList = $("#mainContent > table.unit-list-2014");
     let $rows = $unitList.find("td.unit_id").closest("tr");
-
-    let units = parseUnits();
-    let townRegDict = makeRegTownDict(units);
+    let units = parseUnits($rows, mode);
+    let townRegDict = makeRegTownDict(units);   // словарь чтобы удобно было найти связь город страна
     let inProcess = { Count: 0, Finally: () => { }};      // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
 
-    // поиск эффективности и подсветка красным всего что не 100%
-    efficiencyColor(units);
+    if (mode === Modes.self) {
+        // поиск эффективности и подсветка красным всего что не 100%
+        efficiencyColor(units);
 
-    // клик на эффективность
-    efficiencyClick(units);
+        // клик на эффективность
+        efficiencyClick(units);
 
-    // сокращенный размер для размеров подразделений
-    resizeSizeColumn();
+        // сокращенный размер для размеров подразделений
+        resizeSizeColumn();
 
-    // Перемещаем создать подразделение в одну строку с типа подразделений
-    moveCreateBtn();
+        // Перемещаем создать подразделение в одну строку с типа подразделений
+        moveCreateBtn();
+    }
 
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
 
     // создаем панельку, и шоутайм.
-    let $panel = buildFilterPanel(units);
-    $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    let $panel = buildFilterPanel();
+    if (mode === Modes.self)
+        $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    else
+        $panel.wrapAll("<div></div>").closest("div").insertBefore($unitList);
+
     $panel.show();
 
 
@@ -133,8 +147,8 @@ function run() {
     // делает фильтрацию
     function doFilter($panel: JQuery) {
 
-        let op = getFilterOptions($panel);
-        let filterMask = filter(units, op);
+        let op = getFilterOptions($panel, mode);
+        let filterMask = filter(units, op, mode);
 
         for (let i = 0; i < units.length; i++) {
             let unit = units[i];
@@ -152,7 +166,7 @@ function run() {
         }
     }
 
-    function buildFilterPanel(units: IUnit[]) {
+    function buildFilterPanel() {
 
         function buildOptions (items: INameValueCount[]) {
             let optionsHtml = '<option value="all", label="all">all</option>';
@@ -264,7 +278,7 @@ function run() {
             $btn.prop('disabled', true).css("color", "gray");
 
             // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
-            let filterMask = filter(units, getFilterOptions($panel));
+            let filterMask = filter(units, getFilterOptions($panel, mode), mode);
             filterMask.forEach((e, i, arr) =>  e && inProcess.Count++);
             inProcess.Finally = () => {
                 // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
@@ -283,9 +297,11 @@ function run() {
         $panel.append("<span> Город: </span>").append(townFilter);
         $panel.append("<span> Текст: </span>").append(textFilter);
         $panel.append("<span> Товары: </span>").append(goodsFilter);
-        $panel.append("<span> Проблемы: </span>").append(problemsFilter);
-        $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
-        $panel.append("<span> </span>").append(effButton);
+        if (mode === Modes.self) {
+            $panel.append("<span> Проблемы: </span>").append(problemsFilter);
+            $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
+            $panel.append("<span> </span>").append(effButton);
+        }
 
         return $panel;
     }
@@ -344,48 +360,54 @@ function run() {
             return false;
         });
     }
+}
 
-    function parseUnits(): IUnit[] {
+function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
 
-        let units: IUnit[] = [];
-        for (let i = 0; i < $rows.length; i++) {
-            let $r = $rows.eq(i);
+    let units: IUnit[] = [];
+    for (let i = 0; i < $rows.length; i++) {
+        let $r = $rows.eq(i);
 
-            let id = numberfy($r.find("td.unit_id").text());
+        let id = numberfy($r.find("td.unit_id").text());
 
-            let $geo = $r.find("td.geo");
-            let reg = $geo.attr("title").trim();
-            let twn = $geo.text().trim();
+        let $geo = $r.find("td.geo");
+        let reg = $geo.attr("title").trim();
+        let twn = $geo.text().trim();
 
-            let goods = $r.find("td.spec").find("img").map((i, e): INameUrl => {
+        let goods = $r.find("td.spec").find("img").map((i, e): INameUrl => {
+            return { Name: $(e).attr("title"), Url: $(e).attr("src") };
+        }).get() as any as INameUrl[];
+
+        // на чужой странице нет проблем и эффективностей
+        let problems: INameUrl[] = [];
+        let $eff = $("<br/>");
+        let eff = -1;
+        if (mode === Modes.self) {
+            problems = $r.find("td.alerts").find("img").map((i, e): INameUrl => {
                 return { Name: $(e).attr("title"), Url: $(e).attr("src") };
             }).get() as any as INameUrl[];
 
-            let problems = $r.find("td.alerts").find("img").map((i, e): INameUrl => {
-                return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get() as any as INameUrl[];
-
-            let $eff = $r.find("td.prod");
-            let eff = numberfy($eff.clone().children().remove().end().text());
-
-            units.push({
-                $row: $r,
-                Id: id,
-                Region: reg,
-                Town: twn,
-                Goods: goods,
-                Problems: problems,
-                Efficiency: eff,
-                $eff: $eff
-            });
+            $eff = $r.find("td.prod");
+            eff = numberfy($eff.clone().children().remove().end().text());
         }
 
-        return units;
+        units.push({
+            $row: $r,
+            Id: id,
+            Region: reg,
+            Town: twn,
+            Goods: goods,
+            Problems: problems,
+            Efficiency: eff,
+            $eff: $eff
+        });
     }
+
+    return units;
 }
 
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
-function filter(units: IUnit[], options: IFilterOptions) {
+function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
 
     let res: boolean[] = [];
     for (let i = 0; i < units.length; i++) {
@@ -404,24 +426,27 @@ function filter(units: IUnit[], options: IFilterOptions) {
         if (options.GoodUrl != "all" && !unit.Goods.some((e) => e.Url === options.GoodUrl))
             continue;
 
-        if (options.ProblemUrl != "all" && !unit.Problems.some((e) => e.Url === options.ProblemUrl))
-            continue;
+        if (mode === Modes.self) {
 
-        switch (options.Efficiency) {
-            case 100: // 100
-                if (unit.Efficiency < 100) continue;
-                break;
+            if (options.ProblemUrl != "all" && !unit.Problems.some((e) => e.Url === options.ProblemUrl))
+                continue;
 
-            case 10: // < 100
-                if (unit.Efficiency >= 100) continue;
-                break;
+            switch (options.Efficiency) {
+                case 100: // 100
+                    if (unit.Efficiency < 100) continue;
+                    break;
 
-            case 0: // 0
-                if (unit.Efficiency > 0) continue;
-                break;
+                case 10: // < 100
+                    if (unit.Efficiency >= 100) continue;
+                    break;
 
-            case -1: // all
-                break;
+                case 0: // 0
+                    if (unit.Efficiency > 0) continue;
+                    break;
+
+                case -1: // all
+                    break;
+            }
         }
 
         res[i] = true;
@@ -430,14 +455,14 @@ function filter(units: IUnit[], options: IFilterOptions) {
     return res;
 }
 
-function getFilterOptions($panel: JQuery): IFilterOptions {
+function getFilterOptions($panel: JQuery, mode: Modes): IFilterOptions {
     return {
         Region: $panel.find("#regionFilter").val(),
         Town: $panel.find("#townFilter").val(),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
-        Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
         GoodUrl: $panel.find("#goodsFilter").val(),
-        ProblemUrl: $panel.find("#problemsFilter").val()
+        ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
+        Efficiency: mode === Modes.self ? numberfy($panel.find("#efficiencyFilter").val()) : -1,
     }
 }
 

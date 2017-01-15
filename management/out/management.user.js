@@ -6,34 +6,51 @@
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @noframes
 // ==/UserScript==
+var Modes;
+(function (Modes) {
+    Modes[Modes["none"] = 0] = "none";
+    Modes[Modes["self"] = 1] = "self";
+    Modes[Modes["other"] = 2] = "other";
+})(Modes || (Modes = {}));
 function run() {
     var $ = jQuery;
     var realm = getRealm();
+    var mode = Modes.none;
+    var $unitTop = $("#mainContent > table.unit-top");
+    var $unitList = $("#mainContent > table.unit-list-2014");
+    var $imgOther = $("#mainContent img[src='/img/icon/add_2_clist.gif']");
+    if ($unitTop.length > 0 && $unitList.length > 0)
+        mode = Modes.self;
+    if ($unitList.length > 0 && $imgOther.length > 0)
+        mode = Modes.other;
     // закончить если мы не на той странице
-    if ($("table.unit-list-2014").length === 0 || $("table.unit-top").length === 0) {
+    if (mode === Modes.none) {
         console.log("management: not on unit list page.");
         return;
     }
     // работа
-    var $unitTop = $("#mainContent > table.unit-top");
-    var $unitList = $("#mainContent > table.unit-list-2014");
     var $rows = $unitList.find("td.unit_id").closest("tr");
-    var units = parseUnits();
-    var townRegDict = makeRegTownDict(units);
+    var units = parseUnits($rows, mode);
+    var townRegDict = makeRegTownDict(units); // словарь чтобы удобно было найти связь город страна
     var inProcess = { Count: 0, Finally: function () { } }; // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
-    // поиск эффективности и подсветка красным всего что не 100%
-    efficiencyColor(units);
-    // клик на эффективность
-    efficiencyClick(units);
-    // сокращенный размер для размеров подразделений
-    resizeSizeColumn();
-    // Перемещаем создать подразделение в одну строку с типа подразделений
-    moveCreateBtn();
+    if (mode === Modes.self) {
+        // поиск эффективности и подсветка красным всего что не 100%
+        efficiencyColor(units);
+        // клик на эффективность
+        efficiencyClick(units);
+        // сокращенный размер для размеров подразделений
+        resizeSizeColumn();
+        // Перемещаем создать подразделение в одну строку с типа подразделений
+        moveCreateBtn();
+    }
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
     // создаем панельку, и шоутайм.
-    var $panel = buildFilterPanel(units);
-    $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    var $panel = buildFilterPanel();
+    if (mode === Modes.self)
+        $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
+    else
+        $panel.wrapAll("<div></div>").closest("div").insertBefore($unitList);
     $panel.show();
     // Функции
     //
@@ -79,8 +96,8 @@ function run() {
     }
     // делает фильтрацию
     function doFilter($panel) {
-        var op = getFilterOptions($panel);
-        var filterMask = filter(units, op);
+        var op = getFilterOptions($panel, mode);
+        var filterMask = filter(units, op, mode);
         for (var i = 0; i < units.length; i++) {
             var unit = units[i];
             var $commentRow = unit.$row.next("tr.unit_comment");
@@ -96,7 +113,7 @@ function run() {
             }
         }
     }
-    function buildFilterPanel(units) {
+    function buildFilterPanel() {
         function buildOptions(items) {
             var optionsHtml = '<option value="all", label="all">all</option>';
             for (var i = 0; i < items.length; i++) {
@@ -177,7 +194,7 @@ function run() {
             var $btn = $(this);
             $btn.prop('disabled', true).css("color", "gray");
             // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
-            var filterMask = filter(units, getFilterOptions($panel));
+            var filterMask = filter(units, getFilterOptions($panel, mode), mode);
             filterMask.forEach(function (e, i, arr) { return e && inProcess.Count++; });
             inProcess.Finally = function () {
                 // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
@@ -194,9 +211,11 @@ function run() {
         $panel.append("<span> Город: </span>").append(townFilter);
         $panel.append("<span> Текст: </span>").append(textFilter);
         $panel.append("<span> Товары: </span>").append(goodsFilter);
-        $panel.append("<span> Проблемы: </span>").append(problemsFilter);
-        $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
-        $panel.append("<span> </span>").append(effButton);
+        if (mode === Modes.self) {
+            $panel.append("<span> Проблемы: </span>").append(problemsFilter);
+            $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
+            $panel.append("<span> </span>").append(effButton);
+        }
         return $panel;
     }
     function efficiencyClick(units) {
@@ -240,38 +259,44 @@ function run() {
             return false;
         });
     }
-    function parseUnits() {
-        var units = [];
-        for (var i = 0; i < $rows.length; i++) {
-            var $r = $rows.eq(i);
-            var id = numberfy($r.find("td.unit_id").text());
-            var $geo = $r.find("td.geo");
-            var reg = $geo.attr("title").trim();
-            var twn = $geo.text().trim();
-            var goods = $r.find("td.spec").find("img").map(function (i, e) {
+}
+function parseUnits($rows, mode) {
+    var units = [];
+    for (var i = 0; i < $rows.length; i++) {
+        var $r = $rows.eq(i);
+        var id = numberfy($r.find("td.unit_id").text());
+        var $geo = $r.find("td.geo");
+        var reg = $geo.attr("title").trim();
+        var twn = $geo.text().trim();
+        var goods = $r.find("td.spec").find("img").map(function (i, e) {
+            return { Name: $(e).attr("title"), Url: $(e).attr("src") };
+        }).get();
+        // на чужой странице нет проблем и эффективностей
+        var problems = [];
+        var $eff = $("<br/>");
+        var eff = -1;
+        if (mode === Modes.self) {
+            problems = $r.find("td.alerts").find("img").map(function (i, e) {
                 return { Name: $(e).attr("title"), Url: $(e).attr("src") };
             }).get();
-            var problems = $r.find("td.alerts").find("img").map(function (i, e) {
-                return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get();
-            var $eff = $r.find("td.prod");
-            var eff = numberfy($eff.clone().children().remove().end().text());
-            units.push({
-                $row: $r,
-                Id: id,
-                Region: reg,
-                Town: twn,
-                Goods: goods,
-                Problems: problems,
-                Efficiency: eff,
-                $eff: $eff
-            });
+            $eff = $r.find("td.prod");
+            eff = numberfy($eff.clone().children().remove().end().text());
         }
-        return units;
+        units.push({
+            $row: $r,
+            Id: id,
+            Region: reg,
+            Town: twn,
+            Goods: goods,
+            Problems: problems,
+            Efficiency: eff,
+            $eff: $eff
+        });
     }
+    return units;
 }
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
-function filter(units, options) {
+function filter(units, options, mode) {
     var res = [];
     for (var i = 0; i < units.length; i++) {
         var unit = units[i];
@@ -284,36 +309,38 @@ function filter(units, options) {
             continue;
         if (options.GoodUrl != "all" && !unit.Goods.some(function (e) { return e.Url === options.GoodUrl; }))
             continue;
-        if (options.ProblemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === options.ProblemUrl; }))
-            continue;
-        switch (options.Efficiency) {
-            case 100:
-                if (unit.Efficiency < 100)
-                    continue;
-                break;
-            case 10:
-                if (unit.Efficiency >= 100)
-                    continue;
-                break;
-            case 0:
-                if (unit.Efficiency > 0)
-                    continue;
-                break;
-            case -1:
-                break;
+        if (mode === Modes.self) {
+            if (options.ProblemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === options.ProblemUrl; }))
+                continue;
+            switch (options.Efficiency) {
+                case 100:
+                    if (unit.Efficiency < 100)
+                        continue;
+                    break;
+                case 10:
+                    if (unit.Efficiency >= 100)
+                        continue;
+                    break;
+                case 0:
+                    if (unit.Efficiency > 0)
+                        continue;
+                    break;
+                case -1:
+                    break;
+            }
         }
         res[i] = true;
     }
     return res;
 }
-function getFilterOptions($panel) {
+function getFilterOptions($panel, mode) {
     return {
         Region: $panel.find("#regionFilter").val(),
         Town: $panel.find("#townFilter").val(),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
-        Efficiency: numberfy($panel.find("#efficiencyFilter").val()),
         GoodUrl: $panel.find("#goodsFilter").val(),
-        ProblemUrl: $panel.find("#problemsFilter").val()
+        ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
+        Efficiency: mode === Modes.self ? numberfy($panel.find("#efficiencyFilter").val()) : -1,
     };
 }
 function getGoods(units) {
