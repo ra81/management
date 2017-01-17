@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.69
+// @version 	   1.70
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @noframes
@@ -134,65 +134,55 @@ function run() {
         var panelHtml = "<div id='filterPanel' style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'></div>";
         var $panel = $(panelHtml);
         // фильтр по регионам
-        var regionFilter = $("<select id='regionFilter' style='max-width:100px;'>");
+        var regionFilter = $("<select id='regionFilter' class='option' style='max-width:100px;'>");
         var regions = makeKeyValCount(units, function (el) { return el.Region; });
         regionFilter.append(buildOptions(regions));
         // фильтр по городам
-        var townFilter = $("<select id='townFilter' style='max-width:100px;'>");
+        var townFilter = $("<select id='townFilter' class='option' style='max-width:100px;'>");
         var towns = makeKeyValCount(units, function (el) { return el.Town; });
         townFilter.append(buildOptions(towns));
+        // фильтр по типам
+        var typeFilter = $("<select id='typeFilter' class='option' style='max-width:100px;'>");
+        var types = makeKeyValCount(units, function (el) { return el.Type; });
+        typeFilter.append(buildOptions(types));
         // фильтр по товарам
-        var goodsFilter = $("<select id='goodsFilter' style='max-width:100px;'>");
+        var goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:100px;'>");
         goodsFilter.append(buildOptions(getGoods(units)));
         // фильтр по проблемам
-        var problemsFilter = $("<select id='problemsFilter' style='max-width:100px;'>");
+        var problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:100px;'>");
         problemsFilter.append(buildOptions(getProblems(units)));
         // фильтр по эффективности
-        var efficiencyFilter = $("<select id='efficiencyFilter' style='max-width:50px;'>")
+        var efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
             .append('<option value=-1>Все</option>')
             .append('<option value=10>< 100%</option>')
             .append('<option value=100>100%</option>')
             .append('<option value=0>0%</option>');
         // текстовый фильтр
-        var textFilter = $('<input id="textFilter" style="max- width:100px;"></input>').attr({ type: 'text', value: '' });
+        var textFilter = $("<input id='textFilter' class='option' style='max-width:100px;'></input>").attr({ type: 'text', value: '' });
         // запрос сразу всех данных по эффективности
-        var effButton = $('<input type=button id=getEff value="GO">').css("color", "red");
+        var effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
         // события смены фильтров
         //
-        // смена региона сбрасывает выбор города в all
-        regionFilter.change(function () {
-            townFilter.val("all");
+        // делегируем все события на панель
+        $panel.on("change", ".option", function (event) {
+            var $el = $(event.target);
+            // смена региона сбросит город
+            if ($el.is(regionFilter))
+                townFilter.val("all");
+            // смена города выставит регион в тот который надо для города
+            if ($el.is(townFilter)) {
+                var twn = $el.val();
+                var reg = twn === "all" ? "all" : townRegDict[twn];
+                regionFilter.val(reg);
+            }
             doFilter($panel);
         });
-        // на смене города выставим регион в тот, который соответствует городу.
-        townFilter.change(function () {
-            var select = $(this);
-            var twn = select.val();
-            var reg = twn === "all" ? "all" : townRegDict[twn];
-            //console.log(reg);
-            regionFilter.val(reg);
-            doFilter($panel);
-        });
-        // просто фильтруем.
-        textFilter.change(function () {
-            //var text = this.value;
-            //console.log(text);
-            doFilter($panel);
-        });
-        efficiencyFilter.change(function () {
-            //var text = this.value;
-            //console.log(text);
-            doFilter($panel);
-        });
-        goodsFilter.change(function () {
-            //var text = this.value;
-            //console.log(text);
-            doFilter($panel);
-        });
-        problemsFilter.change(function () {
-            //var text = this.value;
-            //console.log(text);
-            doFilter($panel);
+        $panel.on("dblclick", ".option", function (event) {
+            var $el = $(event.target);
+            if ($el.is("select")) {
+                $el.prop('selectedIndex', 0);
+                $el.change();
+            }
         });
         effButton.click(function () {
             var $btn = $(this);
@@ -216,13 +206,14 @@ function run() {
         });
         // дополняем панель до конца элементами
         //
-        $panel.append("<span>Регион: </span>").append(regionFilter);
-        $panel.append("<span> Город: </span>").append(townFilter);
-        $panel.append("<span> Текст: </span>").append(textFilter);
-        $panel.append("<span> Товары: </span>").append(goodsFilter);
+        $panel.append("<span>Рег: </span>").append(regionFilter);
+        $panel.append("<span> Гор: </span>").append(townFilter);
+        $panel.append("<span> Тип: </span>").append(typeFilter);
+        $panel.append("<span> Rx: </span>").append(textFilter);
+        $panel.append("<span> Тов: </span>").append(goodsFilter);
         if (mode === Modes.self) {
-            $panel.append("<span> Проблемы: </span>").append(problemsFilter);
-            $panel.append("<span> Эфф: </span>").append(efficiencyFilter);
+            $panel.append("<span> Алерт: </span>").append(problemsFilter);
+            $panel.append("<span> Эф: </span>").append(efficiencyFilter);
             $panel.append("<span> </span>").append(effButton);
         }
         return $panel;
@@ -285,19 +276,35 @@ function parseUnits($rows, mode) {
             });
         return res;
     };
+    var nameUrlToString = function (items) {
+        var str = " ";
+        for (var i = 0; i < items.length; i++)
+            str += items[i].Name + " " + items[i].Url + " ";
+        return str;
+    };
     // через полный конвейр map 68 секунд
     // через нахождение ячеек из рядов и затем допарсинг так же
     // если сразу искать $(td.unit_id) и потом допарсивать в цикле то так же как по рядам.
     // просто по рядам 17 сек на 10к строк. приемлемо
     for (var i = 0; i < $rows.length; i++) {
         var $r = $rows.eq(i);
+        var searchStr = "";
         var id = numberfy($r.find("td.unit_id").text()); // внутри триммится
+        searchStr += id;
         var $geo = $r.find("td.geo");
         var reg = $geo.attr("title").trim();
         var twn = $geo.text().trim();
+        searchStr += " " + reg + " " + twn;
+        var $info = $r.find("td.info");
+        var $link = $info.find("a");
+        var name_1 = $link.text();
+        var url = $link.attr("href");
+        var type = $info.attr("title");
+        searchStr += " " + name_1 + " " + url + " " + type;
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
         var $goods = $r.find("td.spec").find("img");
         var goods = parseImgs($goods);
+        searchStr += " " + nameUrlToString(goods);
         // на чужой странице нет проблем и эффективностей
         var problems = [];
         var $eff = $("<br/>");
@@ -305,18 +312,24 @@ function parseUnits($rows, mode) {
         if (mode === Modes.self) {
             var $problems = $r.find("td.alerts").find("img");
             problems = parseImgs($problems);
+            searchStr += " " + nameUrlToString(problems);
             $eff = $r.find("td.prod");
             eff = numberfy($eff.clone().children().remove().end().text());
+            searchStr += " " + eff;
         }
         units.push({
             $row: $r,
             Id: id,
             Region: reg,
             Town: twn,
+            Name: name_1,
+            Url: url,
+            Type: type,
             Goods: goods,
             Problems: problems,
             Efficiency: eff,
-            $eff: $eff
+            $eff: $eff,
+            SearchString: searchStr
         });
     }
     return units;
@@ -324,6 +337,7 @@ function parseUnits($rows, mode) {
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
 function filter(units, options, mode) {
     var res = [];
+    var textRx = new RegExp(options.TextRx, "i");
     for (var i = 0; i < units.length; i++) {
         var unit = units[i];
         res[i] = false;
@@ -331,7 +345,9 @@ function filter(units, options, mode) {
             continue;
         if (options.Town != "all" && unit.Town != options.Town)
             continue;
-        if (unit.$row.text().match(new RegExp(options.TextRx, "i")) == null)
+        if (options.Type != "all" && unit.Type != options.Type)
+            continue;
+        if (textRx.test(unit.SearchString) === false)
             continue;
         if (options.GoodUrl != "all" && !unit.Goods.some(function (e) { return e.Url === options.GoodUrl; }))
             continue;
@@ -363,6 +379,7 @@ function getFilterOptions($panel, mode) {
     return {
         Region: $panel.find("#regionFilter").val(),
         Town: $panel.find("#townFilter").val(),
+        Type: $panel.find("#typeFilter").val(),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
         GoodUrl: $panel.find("#goodsFilter").val(),
         ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
