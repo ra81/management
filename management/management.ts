@@ -42,6 +42,9 @@ interface IDictionary<T> {
 enum Modes { none, self, other }
 
 function run() {
+    let start = performance.now();
+    let elapsed = 0;
+
     let $ = jQuery;
     let realm = getRealm();
 
@@ -63,7 +66,7 @@ function run() {
     }
 
     // работа
-    let $rows = $unitList.find("td.unit_id").closest("tr");
+    let $rows = closestByTagName($unitList.find("td.unit_id"), "tr");
     let units = parseUnits($rows, mode);
     let townRegDict = makeRegTownDict(units);   // словарь чтобы удобно было найти связь город страна
     let inProcess = { Count: 0, Finally: () => { }};      // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
@@ -85,7 +88,7 @@ function run() {
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
 
-    // создаем панельку, и шоутайм.
+     // создаем панельку, и шоутайм.
     let $panel = buildFilterPanel();
     if (mode === Modes.self)
         $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
@@ -94,6 +97,8 @@ function run() {
 
     $panel.show();
 
+    elapsed = (performance.now() - start) / 1000;
+    console.log(`manager: ${$rows.length} units parsed  in ${elapsed.toPrecision(3)} sec.`);
 
     // Функции
     //
@@ -376,27 +381,42 @@ function run() {
 function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
 
     let units: IUnit[] = [];
+
+    let parseImgs = ($imgs: JQuery): INameUrl[] => {
+        let res: INameUrl[] = [];
+
+        for (let m = 0; m < $imgs.length; m++)
+            res.push({
+                Name: $imgs.eq(m).attr("title").trim(),
+                Url: $imgs.eq(m).attr("src")
+            });
+
+        return res;
+    };
+    // через полный конвейр map 68 секунд
+    // через нахождение ячеек из рядов и затем допарсинг так же
+    // если сразу искать $(td.unit_id) и потом допарсивать в цикле то так же как по рядам.
+    // просто по рядам 17 сек на 10к строк. приемлемо
     for (let i = 0; i < $rows.length; i++) {
         let $r = $rows.eq(i);
 
-        let id = numberfy($r.find("td.unit_id").text());
+        let id = numberfy($r.find("td.unit_id").text());    // внутри триммится
 
         let $geo = $r.find("td.geo");
         let reg = $geo.attr("title").trim();
         let twn = $geo.text().trim();
 
-        let goods = $r.find("td.spec").find("img").map((i, e): INameUrl => {
-            return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-        }).get() as any as INameUrl[];
+        //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
+        let $goods = $r.find("td.spec").find("img");
+        let goods = parseImgs($goods);
 
         // на чужой странице нет проблем и эффективностей
         let problems: INameUrl[] = [];
         let $eff = $("<br/>");
         let eff = -1;
         if (mode === Modes.self) {
-            problems = $r.find("td.alerts").find("img").map((i, e): INameUrl => {
-                return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get() as any as INameUrl[];
+            let $problems = $r.find("td.alerts").find("img");
+            problems = parseImgs($problems);
 
             $eff = $r.find("td.prod");
             eff = numberfy($eff.clone().children().remove().end().text());
@@ -568,6 +588,24 @@ function numberfy(str: string): number {
         let n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
         return isNaN(n) ?  -1 : n;
     }
+}
+
+// добавим свой метод поиска родителя ибо штатный пиздец тормоз.
+// работает как и closest. Если род не найден то не возвращает ничего для данного элемента
+// то есть есть шанс что было 10 а родителей нашли 4 и их вернули.
+function closestByTagName(items: JQuery, tagname: string): JQuery {
+    let tag = tagname.toUpperCase();
+
+    let found: Node[] = [];
+    for (let i = 0; i < items.length; i++) {
+        let node: Node = items[i];
+        while ((node = node.parentNode) && node.nodeName != tag) { };
+
+        if (node)
+            found.push(node);
+    }
+
+    return $(found);
 }
 
 $(document).ready(() => run());

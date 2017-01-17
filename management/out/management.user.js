@@ -13,6 +13,8 @@ var Modes;
     Modes[Modes["other"] = 2] = "other";
 })(Modes || (Modes = {}));
 function run() {
+    var start = performance.now();
+    var elapsed = 0;
     var $ = jQuery;
     var realm = getRealm();
     var mode = Modes.none;
@@ -29,7 +31,7 @@ function run() {
         return;
     }
     // работа
-    var $rows = $unitList.find("td.unit_id").closest("tr");
+    var $rows = closestByTagName($unitList.find("td.unit_id"), "tr");
     var units = parseUnits($rows, mode);
     var townRegDict = makeRegTownDict(units); // словарь чтобы удобно было найти связь город страна
     var inProcess = { Count: 0, Finally: function () { } }; // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
@@ -52,6 +54,8 @@ function run() {
     else
         $panel.wrapAll("<div></div>").closest("div").insertBefore($unitList);
     $panel.show();
+    elapsed = (performance.now() - start) / 1000;
+    console.log("manager: " + $rows.length + " units parsed  in " + elapsed.toPrecision(3) + " sec.");
     // Функции
     //
     // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
@@ -272,23 +276,35 @@ function run() {
 }
 function parseUnits($rows, mode) {
     var units = [];
+    var parseImgs = function ($imgs) {
+        var res = [];
+        for (var m = 0; m < $imgs.length; m++)
+            res.push({
+                Name: $imgs.eq(m).attr("title").trim(),
+                Url: $imgs.eq(m).attr("src")
+            });
+        return res;
+    };
+    // через полный конвейр map 68 секунд
+    // через нахождение ячеек из рядов и затем допарсинг так же
+    // если сразу искать $(td.unit_id) и потом допарсивать в цикле то так же как по рядам.
+    // просто по рядам 17 сек на 10к строк. приемлемо
     for (var i = 0; i < $rows.length; i++) {
         var $r = $rows.eq(i);
-        var id = numberfy($r.find("td.unit_id").text());
+        var id = numberfy($r.find("td.unit_id").text()); // внутри триммится
         var $geo = $r.find("td.geo");
         var reg = $geo.attr("title").trim();
         var twn = $geo.text().trim();
-        var goods = $r.find("td.spec").find("img").map(function (i, e) {
-            return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-        }).get();
+        //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
+        var $goods = $r.find("td.spec").find("img");
+        var goods = parseImgs($goods);
         // на чужой странице нет проблем и эффективностей
         var problems = [];
         var $eff = $("<br/>");
         var eff = -1;
         if (mode === Modes.self) {
-            problems = $r.find("td.alerts").find("img").map(function (i, e) {
-                return { Name: $(e).attr("title"), Url: $(e).attr("src") };
-            }).get();
+            var $problems = $r.find("td.alerts").find("img");
+            problems = parseImgs($problems);
             $eff = $r.find("td.prod");
             eff = numberfy($eff.clone().children().remove().end().text());
         }
@@ -424,6 +440,21 @@ function numberfy(str) {
         var n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
         return isNaN(n) ? -1 : n;
     }
+}
+// добавим свой метод поиска родителя ибо штатный пиздец тормоз.
+// работает как и closest. Если род не найден то не возвращает ничего для данного элемента
+// то есть есть шанс что было 10 а родителей нашли 4 и их вернули.
+function closestByTagName(items, tagname) {
+    var tag = tagname.toUpperCase();
+    var found = [];
+    for (var i = 0; i < items.length; i++) {
+        var node = items[i];
+        while ((node = node.parentNode) && node.nodeName != tag) { }
+        ;
+        if (node)
+            found.push(node);
+    }
+    return $(found);
 }
 $(document).ready(function () { return run(); });
 //# sourceMappingURL=management.user.js.map
