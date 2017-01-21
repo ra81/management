@@ -1,11 +1,155 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.70
+// @version 	   1.71
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
+// @require        https://code.jquery.com/jquery-3.1.1.min.js
 // @noframes
-// ==/UserScript==
+// ==/UserScript== 
+// 
+// Набор вспомогательных функций для использования в других проектах. Универсальные
+//   /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
+/**
+ * Проверяет наличие в словаре ключей. Шорт алиас для удобства.
+ * Если словарь не задать, вывалит исключение
+ * @param dict проверяемый словарь
+ */
+function isEmpty(dict) {
+    return Object.keys(dict).length === 0; // исключение на null
+}
+/**
+ * Конвертит словарь в простую текстовую строку вида "key:val, key1:val1"
+ * значения в строку конвертятся штатным toString()
+ * Создана чисто потому что в словарь нельзя засунуть методы.
+ * @param dict
+ */
+function dict2String(dict) {
+    if (isEmpty(dict))
+        return "";
+    var newItems = [];
+    for (var key in dict)
+        newItems.push(key + ":" + dict[key].toString());
+    return newItems.join(", ");
+}
+/**
+ * Проверяет что элемент есть в массиве.
+ * @param item
+ * @param arr массив НЕ null
+ */
+function isOneOf(item, arr) {
+    return arr.indexOf(item) >= 0;
+}
+// PARSE -------------------------------------------
+/**
+ * Выдергивает реалм из текущего href ссылки если это возможно.
+ */
+function getRealm() {
+    // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
+    // https://*virtonomic*.*/*/window/globalreport/marketing/by_trade_at_cities/*
+    var rx = new RegExp(/https:\/\/virtonomic[A-Za-z]+\.[a-zA-Z]+\/([a-zA-Z]+)\/.+/ig);
+    var m = rx.exec(document.location.href);
+    if (m == null)
+        return null;
+    return m[1];
+}
+/**
+ * Парсит id компании со страницы
+ */
+function getCompanyId() {
+    var str = matchedOrError($("a.dashboard").attr("href"), /\d+/);
+    return numberfyOrError(str);
+}
+/**
+ * Оцифровывает строку. Возвращает всегда либо число или Number.POSITIVE_INFINITY либо -1 если отпарсить не вышло.
+ * @param variable любая строка.
+ */
+function numberfy(str) {
+    // возвращает либо число полученно из строки, либо БЕСКОНЕЧНОСТЬ, либо -1 если не получилось преобразовать.
+    if (String(str) === 'Не огр.' ||
+        String(str) === 'Unlim.' ||
+        String(str) === 'Не обм.' ||
+        String(str) === 'N’est pas limité' ||
+        String(str) === 'No limitado' ||
+        String(str) === '无限' ||
+        String(str) === 'Nicht beschr.') {
+        return Number.POSITIVE_INFINITY;
+    }
+    else {
+        // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
+        // не будет эксепшнов
+        var n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
+        return isNaN(n) ? -1 : n;
+    }
+}
+/**
+ * Пробуем оцифровать данные но если они выходят как Number.POSITIVE_INFINITY или <= minVal, валит ошибку.
+   смысл в быстром вываливании ошибки если парсинг текста должен дать число
+ * @param value строка являющая собой число больше minVal
+ * @param minVal ограничение снизу. Число.
+ * @param infinity разрешена ли бесконечность
+ */
+function numberfyOrError(str, minVal, infinity) {
+    if (minVal === void 0) { minVal = 0; }
+    if (infinity === void 0) { infinity = false; }
+    var n = numberfy(str);
+    if (!infinity && (n === Number.POSITIVE_INFINITY || n === Number.NEGATIVE_INFINITY))
+        throw new RangeError("Получили бесконечность, что запрещено.");
+    if (n <= minVal)
+        throw new RangeError("Число должно быть > " + minVal);
+    return n;
+}
+/**
+ * Ищет паттерн в строке. Предполагая что паттерн там обязательно есть 1 раз. Если
+ * нет или случился больше раз, валим ошибку
+ * @param str строка в которой ищем
+ * @param rx паттерн который ищем
+ */
+function matchedOrError(str, rx, errMsg) {
+    var m = str.match(rx);
+    if (m == null)
+        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str);
+    if (m.length > 1)
+        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str + " " + m.length + " \u0440\u0430\u0437 \u0432\u043C\u0435\u0441\u0442\u043E \u043E\u0436\u0438\u0434\u0430\u0435\u043C\u043E\u0433\u043E 1");
+    return m[0];
+}
+// JQUERY ----------------------------------------
+/**
+ * Возвращает ближайшего родителя по имени Тэга
+   работает как и closest. Если родитель не найден то не возвращает ничего для данного элемента
+    то есть есть шанс что было 10 а родителей нашли 4 и их вернули.
+ * @param items набор элементов JQuery
+ * @param tagname имя тэга. tr, td, span и так далее
+ */
+function closestByTagName(items, tagname) {
+    var tag = tagname.toUpperCase();
+    var found = [];
+    for (var i = 0; i < items.length; i++) {
+        var node = items[i];
+        while ((node = node.parentNode) && node.nodeName != tag) { }
+        ;
+        if (node)
+            found.push(node);
+    }
+    return $(found);
+}
+/**
+ * Для заданного элемента, находит все непосредственно расположенные в нем текстовые ноды и возвращает их текст.
+   очень удобен для извлечения непосредственного текста из тэга БЕЗ текста дочерних нодов
+ * @param item 1 объект типа JQuery
+ */
+function getOnlyText(item) {
+    // просто children() не отдает текстовые ноды.
+    var $childrenNodes = item.contents();
+    var res = [];
+    for (var i = 0; i < $childrenNodes.length; i++) {
+        var el = $childrenNodes.get(i);
+        if (el.nodeType === 3)
+            res.push($(el).text()); // так как в разных браузерах текст запрашивается по разному, 
+    }
+    return res;
+}
+/// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 var Modes;
 (function (Modes) {
     Modes[Modes["none"] = 0] = "none";
@@ -153,9 +297,9 @@ function run() {
         problemsFilter.append(buildOptions(getProblems(units)));
         // фильтр по эффективности
         var efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
-            .append('<option value=-1>Все</option>')
-            .append('<option value=10>< 100%</option>')
-            .append('<option value=100>100%</option>')
+            .append('<option value=-1>all</option>')
+            .append('<option value=100>100%</option>') // ТОЛЬКО 100%
+            .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
         // текстовый фильтр
         var textFilter = $("<input id='textFilter' class='option' style='max-width:100px;'></input>").attr({ type: 'text', value: '' });
@@ -360,7 +504,7 @@ function filter(units, options, mode) {
                         continue;
                     break;
                 case 10:
-                    if (unit.Efficiency >= 100)
+                    if (unit.Efficiency >= 100 || unit.Efficiency < 0)
                         continue;
                     break;
                 case 0:
@@ -398,15 +542,6 @@ function getProblems(units) {
         problems.push.apply(problems, units[i].Problems);
     return makeKeyValCount(problems, function (el) { return el.Name; }, function (el) { return el.Url; });
 }
-function getRealm() {
-    // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
-    // https://*virtonomic*.*/*/window/globalreport/marketing/by_trade_at_cities/*
-    var rx = new RegExp(/https:\/\/virtonomic[A-Za-z]+\.[a-zA-Z]+\/([a-zA-Z]+)\/.+/ig);
-    var m = rx.exec(document.location.href);
-    if (m == null)
-        return null;
-    return m[1];
-}
 function makeKeyValCount(items, keySelector, valueSelector) {
     var res = {};
     for (var i = 0; i < items.length; i++) {
@@ -439,39 +574,6 @@ function makeRegTownDict(units) {
         res[town] = units[i].Region;
     }
     return res;
-}
-function numberfy(str) {
-    // возвращает либо число полученно из строки, либо БЕСКОНЕЧНОСТЬ, либо -1 если не получилось преобразовать.
-    if (String(str) === 'Не огр.' ||
-        String(str) === 'Unlim.' ||
-        String(str) === 'Не обм.' ||
-        String(str) === 'N’est pas limité' ||
-        String(str) === 'No limitado' ||
-        String(str) === '无限' ||
-        String(str) === 'Nicht beschr.') {
-        return Number.POSITIVE_INFINITY;
-    }
-    else {
-        // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
-        // не будет эксепшнов
-        var n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
-        return isNaN(n) ? -1 : n;
-    }
-}
-// добавим свой метод поиска родителя ибо штатный пиздец тормоз.
-// работает как и closest. Если род не найден то не возвращает ничего для данного элемента
-// то есть есть шанс что было 10 а родителей нашли 4 и их вернули.
-function closestByTagName(items, tagname) {
-    var tag = tagname.toUpperCase();
-    var found = [];
-    for (var i = 0; i < items.length; i++) {
-        var node = items[i];
-        while ((node = node.parentNode) && node.nodeName != tag) { }
-        ;
-        if (node)
-            found.push(node);
-    }
-    return $(found);
 }
 $(document).ready(function () { return run(); });
 //# sourceMappingURL=management.user.js.map

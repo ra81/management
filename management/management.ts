@@ -1,13 +1,6 @@
-﻿// ==UserScript==
-// @name           Virtonomica: management
-// @namespace      https://github.com/ra81/management
-// @version 	   1.70
-// @description    Добавление нового функционала к управлению предприятиями
-// @include        https://*virtonomic*.*/*/main/company/view/*
-// @noframes
-// ==/UserScript==
+﻿
+/// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 
-//debugger;а
 
 interface INameValueCount {
     Name: string;
@@ -40,9 +33,6 @@ interface IFilterOptions {
     GoodUrl: string;
     ProblemUrl: string;
     Efficiency: number;
-}
-interface IDictionary<T> {
-    [key: string]: T;
 }
 enum Modes { none, self, other }
 
@@ -223,9 +213,9 @@ function run() {
 
         // фильтр по эффективности
         let efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
-            .append('<option value=-1>Все</option>')
-            .append('<option value=10>< 100%</option>')
-            .append('<option value=100>100%</option>')
+            .append('<option value=-1>all</option>')
+            .append('<option value=100>100%</option>')  // ТОЛЬКО 100%
+            .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
 
 
@@ -482,8 +472,8 @@ function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
                     if (unit.Efficiency < 100) continue;
                     break;
 
-                case 10: // < 100
-                    if (unit.Efficiency >= 100) continue;
+                case 10: // < 100: [0, 100)  если юнит неактивен или в отпуске то будет -1
+                    if (unit.Efficiency >= 100 || unit.Efficiency < 0) continue;
                     break;
 
                 case 0: // 0
@@ -531,17 +521,6 @@ function getProblems(units: IUnit[]) {
     return makeKeyValCount(problems, (el) => el.Name, (el) => el.Url);
 }
 
-function getRealm(): string | null {
-    // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
-    // https://*virtonomic*.*/*/window/globalreport/marketing/by_trade_at_cities/*
-    let rx = new RegExp(/https:\/\/virtonomic[A-Za-z]+\.[a-zA-Z]+\/([a-zA-Z]+)\/.+/ig);
-    let m = rx.exec(document.location.href);
-    if (m == null)
-        return null;
-
-    return m[1];
-}
-
 function makeKeyValCount<T>(items: T[], keySelector: (el: T) => string, valueSelector?: (el: T) => string) {
 
     let res: IDictionary<INameValueCount> = {};
@@ -587,41 +566,5 @@ function makeRegTownDict(units: IUnit[]): IDictionary<string> {
     return res;
 }
 
-function numberfy(str: string): number {
-    // возвращает либо число полученно из строки, либо БЕСКОНЕЧНОСТЬ, либо -1 если не получилось преобразовать.
-
-    if (String(str) === 'Не огр.' ||
-        String(str) === 'Unlim.' ||
-        String(str) === 'Не обм.' ||
-        String(str) === 'N’est pas limité' ||
-        String(str) === 'No limitado' ||
-        String(str) === '无限' ||
-        String(str) === 'Nicht beschr.') {
-        return Number.POSITIVE_INFINITY;
-    } else {
-        // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
-        // не будет эксепшнов
-        let n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
-        return isNaN(n) ?  -1 : n;
-    }
-}
-
-// добавим свой метод поиска родителя ибо штатный пиздец тормоз.
-// работает как и closest. Если род не найден то не возвращает ничего для данного элемента
-// то есть есть шанс что было 10 а родителей нашли 4 и их вернули.
-function closestByTagName(items: JQuery, tagname: string): JQuery {
-    let tag = tagname.toUpperCase();
-
-    let found: Node[] = [];
-    for (let i = 0; i < items.length; i++) {
-        let node: Node = items[i];
-        while ((node = node.parentNode) && node.nodeName != tag) { };
-
-        if (node)
-            found.push(node);
-    }
-
-    return $(found);
-}
 
 $(document).ready(() => run());
