@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.71
+// @version 	   1.72
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @require        https://code.jquery.com/jquery-3.1.1.min.js
@@ -42,6 +42,13 @@ function isOneOf(item, arr) {
 }
 // PARSE -------------------------------------------
 /**
+ * удаляет из строки все денежные и специальные символы типо процента и пробелы между цифрами
+ * @param str
+ */
+function cleanStr(str) {
+    return str.replace(/[\s\$\%\©]/g, "");
+}
+/**
  * Выдергивает реалм из текущего href ссылки если это возможно.
  */
 function getRealm() {
@@ -78,7 +85,7 @@ function numberfy(str) {
     else {
         // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
         // не будет эксепшнов
-        var n = parseFloat(String(str).replace(/[\s\$\%\©]/g, ""));
+        var n = parseFloat(cleanStr(String(str)));
         return isNaN(n) ? -1 : n;
     }
 }
@@ -112,6 +119,56 @@ function matchedOrError(str, rx, errMsg) {
     if (m.length > 1)
         throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str + " " + m.length + " \u0440\u0430\u0437 \u0432\u043C\u0435\u0441\u0442\u043E \u043E\u0436\u0438\u0434\u0430\u0435\u043C\u043E\u0433\u043E 1");
     return m[0];
+}
+/**
+ * Пробуем прогнать регулярное выражение на строку, если не прошло, то вывалит ошибку.
+ * иначе вернет массив. 0 элемент это найденная подстрока, остальные это найденные группы ()
+ * @param str
+ * @param rx
+ * @param errMsg
+ */
+function execOrError(str, rx, errMsg) {
+    var m = rx.exec(str);
+    if (m == null)
+        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str);
+    return m;
+}
+/**
+ * из строки пробует извлечь все вещественные числа. Рекомендуется применять ТОЛЬКО для извлечения из текстовых строк.
+ * для простого парсинга числа пойдет numberfy
+ * Если их нет вернет null
+ * @param str
+ */
+function extractFloatPositive(str) {
+    var m = cleanStr(str).match(/\d+\.\d+/ig);
+    if (m == null)
+        return null;
+    var n = m.map(function (i, e) { return numberfyOrError($(e).text(), -1); });
+    return n;
+}
+var urlUnitMainRx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
+var urlTradeHallRx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
+var urlVisitorsHistoryRx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
+function isMyUnitList() {
+    // для ссылки обязательно завершающий unit_list мы так решили
+    var rx = /\/\w+\/main\/company\/view\/\d+\/unit_list\/?$/ig;
+    if (rx.test(document.location.pathname) === false)
+        return false;
+    // помимо ссылки мы можем находиться на чужой странице юнитов
+    if ($("#mainContent > table.unit-top").length === 0
+        || $("#mainContent > table.unit-list-2014").length === 0)
+        return false;
+    return true;
+}
+function isUnitMain() {
+    return urlUnitMainRx.test(document.location.pathname);
+}
+function isShop() {
+    var $a = $("ul.tabu a[href$=trading_hall]");
+    return $a.length === 1;
+}
+function isVisitorsHistory() {
+    return urlVisitorsHistoryRx.test(document.location.pathname);
 }
 // JQUERY ----------------------------------------
 /**
@@ -148,6 +205,20 @@ function getOnlyText(item) {
             res.push($(el).text()); // так как в разных браузерах текст запрашивается по разному, 
     }
     return res;
+}
+// COMMON ----------------------------------------
+var $xioDebug = false;
+function logDebug(msg) {
+    var args = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        args[_i - 1] = arguments[_i];
+    }
+    if (!$xioDebug)
+        return;
+    if (args.length === 0)
+        console.log(msg);
+    else
+        console.log(msg, args);
 }
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 var Modes;
@@ -246,10 +317,12 @@ function run() {
     function doFilter($panel) {
         var op = getFilterOptions($panel, mode);
         var filterMask = filter(units, op, mode);
+        var cnt = 0;
         for (var i = 0; i < units.length; i++) {
             var unit = units[i];
             var $commentRow = unit.$row.next("tr.unit_comment");
             if (filterMask[i]) {
+                cnt++;
                 unit.$row.show();
                 if ($commentRow.length > 0)
                     $commentRow.show();
@@ -260,6 +333,7 @@ function run() {
                     $commentRow.hide();
             }
         }
+        $panel.find("#rows").text("[" + cnt + "]");
     }
     function buildFilterPanel() {
         function buildOptions(items) {
@@ -354,6 +428,7 @@ function run() {
         $panel.append("<span> Гор: </span>").append(townFilter);
         $panel.append("<span> Тип: </span>").append(typeFilter);
         $panel.append("<span> Rx: </span>").append(textFilter);
+        $panel.append("<span id='rows' style='color: blue;'></span>");
         $panel.append("<span> Тов: </span>").append(goodsFilter);
         if (mode === Modes.self) {
             $panel.append("<span> Алерт: </span>").append(problemsFilter);
@@ -444,7 +519,8 @@ function parseUnits($rows, mode) {
         var name_1 = $link.text();
         var url = $link.attr("href");
         var type = $info.attr("title");
-        searchStr += " " + name_1 + " " + url + " " + type;
+        var category = $info.attr("class").split("-")[1];
+        searchStr += " " + name_1 + " " + url + " " + type + " " + category;
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
         var $goods = $r.find("td.spec").find("img");
         var goods = parseImgs($goods);

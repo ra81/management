@@ -150,11 +150,13 @@ function run() {
         let op = getFilterOptions($panel, mode);
         let filterMask = filter(units, op, mode);
 
+        let cnt = 0;
         for (let i = 0; i < units.length; i++) {
             let unit = units[i];
             let $commentRow = unit.$row.next("tr.unit_comment");
 
             if (filterMask[i]) {
+                cnt++;
                 unit.$row.show();
                 if ($commentRow.length > 0)
                     $commentRow.show();
@@ -164,6 +166,8 @@ function run() {
                     $commentRow.hide();
             }
         }
+
+        $panel.find("#rows").text(`[${cnt}]`);
     }
 
     function buildFilterPanel() {
@@ -283,6 +287,7 @@ function run() {
         $panel.append("<span> Гор: </span>").append(townFilter);
         $panel.append("<span> Тип: </span>").append(typeFilter);
         $panel.append("<span> Rx: </span>").append(textFilter);
+        $panel.append("<span id='rows' style='color: blue;'></span>");
         $panel.append("<span> Тов: </span>").append(goodsFilter);
         if (mode === Modes.self) {
             $panel.append("<span> Алерт: </span>").append(problemsFilter);
@@ -398,7 +403,8 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
         let name = $link.text();
         let url = $link.attr("href");
         let type = $info.attr("title");
-        searchStr += " " + name + " " + url + " " + type;
+        let category = $info.attr("class").split("-")[1];
+        searchStr += " " + name + " " + url + " " + type + " " + category;
 
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
         let $goods = $r.find("td.spec").find("img");
