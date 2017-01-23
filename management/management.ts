@@ -78,6 +78,9 @@ function run() {
 
         // Перемещаем создать подразделение в одну строку с типа подразделений
         moveCreateBtn();
+
+        // удалим панельку селектов. наш фильтр ее заменяет полностью
+        $unitTop.find("select.unittype").hide();
     }
 
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
@@ -188,31 +191,50 @@ function run() {
         }
 
         // если панели еще нет, то добавить её
-        let panelHtml = "<div id='filterPanel' style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'></div>";
+        let style = {
+            padding: "2px",
+            border: "1px solid #0184D0",
+            "border-radius": "4px 4px 4px 4px", 
+            float: "left",
+            "white-space": "nowrap", 
+            color: "#0184D0",
+            display: "none",
+            width: "100%"
+        };
+        let panelHtml = `
+            <div id='filterPanel' >
+                <table>
+                <tbody>
+                    <tr><td id="f_row1"></td></tr>
+                    <tr><td id="f_row2"></td></tr>
+                </tbody>
+                </table>
+            </div>`;
         let $panel = $(panelHtml);
+        $panel.css(style);
 
         // фильтр по регионам
-        let regionFilter = $("<select id='regionFilter' class='option' style='max-width:100px;'>");
+        let regionFilter = $("<select id='regionFilter' class='option' style='max-width:120px;'>");
         let regions = makeKeyValCount<IUnit>(units, (el) => el.Region);
         regionFilter.append(buildOptions(regions));
 
 
         // фильтр по городам
-        let townFilter = $("<select id='townFilter' class='option' style='max-width:100px;'>");
+        let townFilter = $("<select id='townFilter' class='option' style='max-width:120px;'>");
         let towns = makeKeyValCount<IUnit>(units, (el) => el.Town);
         townFilter.append(buildOptions(towns));
 
         // фильтр по типам
-        let typeFilter = $("<select id='typeFilter' class='option' style='max-width:100px;'>");
+        let typeFilter = $("<select id='typeFilter' class='option' style='max-width:120px;'>");
         let types = makeKeyValCount<IUnit>(units, (el) => el.Type);
         typeFilter.append(buildOptions(types));
 
         // фильтр по товарам
-        let goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:100px;'>");
+        let goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:120px;'>");
         goodsFilter.append(buildOptions(getGoods(units)));
 
         // фильтр по проблемам
-        let problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:100px;'>");
+        let problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:120px;'>");
         problemsFilter.append(buildOptions(getProblems(units)));
 
         // фильтр по эффективности
@@ -224,7 +246,7 @@ function run() {
 
 
         // текстовый фильтр
-        let textFilter = $("<input id='textFilter' class='option' style='max-width:100px;'></input>").attr({ type: 'text', value: '' });
+        let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '' });
 
         // запрос сразу всех данных по эффективности
         let effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
@@ -283,17 +305,20 @@ function run() {
 
         // дополняем панель до конца элементами
         //
-        $panel.append("<span>Рег: </span>").append(regionFilter);
-        $panel.append("<span> Гор: </span>").append(townFilter);
-        $panel.append("<span> Тип: </span>").append(typeFilter);
-        $panel.append("<span> Rx: </span>").append(textFilter);
-        $panel.append("<span id='rows' style='color: blue;'></span>");
-        $panel.append("<span> Тов: </span>").append(goodsFilter);
+        let $r1 = $panel.find("#f_row1");
+        let $r2 = $panel.find("#f_row2");
+        $r1.append("<span>Рег: </span>").append(regionFilter);
+        $r1.append("<span> Гор: </span>").append(townFilter);
+        $r1.append("<span> Тип: </span>").append(typeFilter);
+        $r1.append("<span> Тов: </span>").append(goodsFilter);
         if (mode === Modes.self) {
-            $panel.append("<span> Алерт: </span>").append(problemsFilter);
-            $panel.append("<span> Эф: </span>").append(efficiencyFilter);
-            $panel.append("<span> </span>").append(effButton);
+            $r1.append("<span> Алерт: </span>").append(problemsFilter);
+            $r1.append("<span> Эф: </span>").append(efficiencyFilter);
+            $r1.append("<span> </span>").append(effButton);
         }
+
+        $r2.append("<span> Rx: </span>").append(textFilter);
+        $r2.append("<span id='rows' style='color: blue;'></span>");
 
         return $panel;
     }

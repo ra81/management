@@ -146,6 +146,64 @@ function extractFloatPositive(str) {
     var n = m.map(function (i, e) { return numberfyOrError($(e).text(), -1); });
     return n;
 }
+/**
+ * По текстовой строке возвращает номер месяца начиная с 0 для января. Либо null
+ * @param str очищенная от пробелов и лишних символов строка
+ */
+function monthFromStr(str) {
+    var mnth = ["янв", "февр", "мар", "апр", "май", "июн", "июл", "авг", "сент", "окт", "нояб", "дек"];
+    for (var i = 0; i < mnth.length; i++) {
+        if (str.indexOf(mnth[i]) === 0)
+            return i;
+    }
+    return null;
+}
+/**
+ * По типовой игровой строке даты вида 10 января 55 г., 3 февраля 2017 - 22.10.12
+ * выдергивает именно дату и возвращает в виде объекта даты
+ * @param str
+ */
+function extractDate(str) {
+    var dateRx = /^(\d{1,2})\s+([а-я]+)\s+(\d{1,4})/i;
+    var m = dateRx.exec(str);
+    if (m == null)
+        return null;
+    var d = parseInt(m[1]);
+    var mon = monthFromStr(m[2]);
+    if (mon == null)
+        return null;
+    var y = parseInt(m[3]);
+    return new Date(y, mon, d);
+}
+/**
+ * из даты формирует короткую строку типа 01.12.2017
+ * @param date
+ */
+function dateToShort(date) {
+    var d = date.getDate();
+    var m = date.getMonth() + 1;
+    var yyyy = date.getFullYear();
+    var dStr = d < 10 ? "0" + d : d.toString();
+    var mStr = m < 10 ? "0" + m : m.toString();
+    return dStr + "." + mStr + "." + yyyy;
+}
+/**
+ * из строки вида 01.12.2017 формирует дату
+ * @param str
+ */
+function dateFromShort(str) {
+    var items = str.split(".");
+    var d = parseInt(items[0]);
+    if (d <= 0)
+        throw new Error("дата неправильная.");
+    var m = parseInt(items[1]) - 1;
+    if (m < 0)
+        throw new Error("месяц неправильная.");
+    var y = parseInt(items[2]);
+    if (y < 0)
+        throw new Error("год неправильная.");
+    return new Date(y, m, d);
+}
 var urlUnitMainRx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
 var urlTradeHallRx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
 var urlVisitorsHistoryRx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
@@ -206,6 +264,17 @@ function getOnlyText(item) {
     }
     return res;
 }
+/**
+ * Пробует найти ровно 1 элемент для заданного селектора. если не нашло или нашло больше валит ошибку
+ * @param $item
+ * @param selector
+ */
+function oneOrError($item, selector) {
+    var $one = $item.find(selector);
+    if ($one.length != 1)
+        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E " + $one.length + " \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u0432 \u0432\u043C\u0435\u0441\u0442\u043E 1 \u0434\u043B\u044F \u0441\u0435\u043B\u0435\u043A\u0442\u043E\u0440\u0430 " + selector);
+    return $one;
+}
 // COMMON ----------------------------------------
 var $xioDebug = false;
 function logDebug(msg) {
@@ -259,6 +328,8 @@ function run() {
         resizeSizeColumn();
         // Перемещаем создать подразделение в одну строку с типа подразделений
         moveCreateBtn();
+        // удалим панельку селектов. наш фильтр ее заменяет полностью
+        $unitTop.find("select.unittype").hide();
     }
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
@@ -349,25 +420,36 @@ function run() {
             return optionsHtml;
         }
         // если панели еще нет, то добавить её
-        var panelHtml = "<div id='filterPanel' style='padding: 2px; border: 1px solid #0184D0; border-radius: 4px 4px 4px 4px; float:left; white-space:nowrap; color:#0184D0; display:none;'></div>";
+        var style = {
+            padding: "2px",
+            border: "1px solid #0184D0",
+            "border-radius": "4px 4px 4px 4px",
+            float: "left",
+            "white-space": "nowrap",
+            color: "#0184D0",
+            display: "none",
+            width: "100%"
+        };
+        var panelHtml = "\n            <div id='filterPanel' >\n                <table>\n                <tbody>\n                    <tr><td id=\"f_row1\"></td></tr>\n                    <tr><td id=\"f_row2\"></td></tr>\n                </tbody>\n                </table>\n            </div>";
         var $panel = $(panelHtml);
+        $panel.css(style);
         // фильтр по регионам
-        var regionFilter = $("<select id='regionFilter' class='option' style='max-width:100px;'>");
+        var regionFilter = $("<select id='regionFilter' class='option' style='max-width:120px;'>");
         var regions = makeKeyValCount(units, function (el) { return el.Region; });
         regionFilter.append(buildOptions(regions));
         // фильтр по городам
-        var townFilter = $("<select id='townFilter' class='option' style='max-width:100px;'>");
+        var townFilter = $("<select id='townFilter' class='option' style='max-width:120px;'>");
         var towns = makeKeyValCount(units, function (el) { return el.Town; });
         townFilter.append(buildOptions(towns));
         // фильтр по типам
-        var typeFilter = $("<select id='typeFilter' class='option' style='max-width:100px;'>");
+        var typeFilter = $("<select id='typeFilter' class='option' style='max-width:120px;'>");
         var types = makeKeyValCount(units, function (el) { return el.Type; });
         typeFilter.append(buildOptions(types));
         // фильтр по товарам
-        var goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:100px;'>");
+        var goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:120px;'>");
         goodsFilter.append(buildOptions(getGoods(units)));
         // фильтр по проблемам
-        var problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:100px;'>");
+        var problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:120px;'>");
         problemsFilter.append(buildOptions(getProblems(units)));
         // фильтр по эффективности
         var efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
@@ -376,7 +458,7 @@ function run() {
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
         // текстовый фильтр
-        var textFilter = $("<input id='textFilter' class='option' style='max-width:100px;'></input>").attr({ type: 'text', value: '' });
+        var textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '' });
         // запрос сразу всех данных по эффективности
         var effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
         // события смены фильтров
@@ -424,17 +506,19 @@ function run() {
         });
         // дополняем панель до конца элементами
         //
-        $panel.append("<span>Рег: </span>").append(regionFilter);
-        $panel.append("<span> Гор: </span>").append(townFilter);
-        $panel.append("<span> Тип: </span>").append(typeFilter);
-        $panel.append("<span> Rx: </span>").append(textFilter);
-        $panel.append("<span id='rows' style='color: blue;'></span>");
-        $panel.append("<span> Тов: </span>").append(goodsFilter);
+        var $r1 = $panel.find("#f_row1");
+        var $r2 = $panel.find("#f_row2");
+        $r1.append("<span>Рег: </span>").append(regionFilter);
+        $r1.append("<span> Гор: </span>").append(townFilter);
+        $r1.append("<span> Тип: </span>").append(typeFilter);
+        $r1.append("<span> Тов: </span>").append(goodsFilter);
         if (mode === Modes.self) {
-            $panel.append("<span> Алерт: </span>").append(problemsFilter);
-            $panel.append("<span> Эф: </span>").append(efficiencyFilter);
-            $panel.append("<span> </span>").append(effButton);
+            $r1.append("<span> Алерт: </span>").append(problemsFilter);
+            $r1.append("<span> Эф: </span>").append(efficiencyFilter);
+            $r1.append("<span> </span>").append(effButton);
         }
+        $r2.append("<span> Rx: </span>").append(textFilter);
+        $r2.append("<span id='rows' style='color: blue;'></span>");
         return $panel;
     }
     function efficiencyClick(units) {
