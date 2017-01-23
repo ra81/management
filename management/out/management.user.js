@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.73
+// @version 	   1.74
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @require        https://code.jquery.com/jquery-1.11.1.min.js
@@ -304,7 +304,7 @@ function run() {
     var mode = Modes.none;
     var $unitTop = $("#mainContent > table.unit-top");
     var $unitList = $("#mainContent > table.unit-list-2014");
-    var $imgOther = $("#mainContent img[src='/img/icon/add_2_clist.gif']");
+    var $imgOther = $("#mainContent a.internal_link");
     if ($unitTop.length > 0 && $unitList.length > 0)
         mode = Modes.self;
     if ($unitList.length > 0 && $imgOther.length > 0)
@@ -458,7 +458,7 @@ function run() {
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
         // текстовый фильтр
-        var textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '' });
+        var textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
         // запрос сразу всех данных по эффективности
         var effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
         // события смены фильтров

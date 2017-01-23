@@ -46,7 +46,7 @@ function run() {
     let mode = Modes.none;
     let $unitTop = $("#mainContent > table.unit-top")
     let $unitList = $("#mainContent > table.unit-list-2014");
-    let $imgOther = $("#mainContent img[src='/img/icon/add_2_clist.gif']");
+    let $imgOther = $("#mainContent a.internal_link");
 
     if ($unitTop.length > 0 && $unitList.length > 0)
         mode = Modes.self;
@@ -246,7 +246,7 @@ function run() {
 
 
         // текстовый фильтр
-        let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '' });
+        let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
 
         // запрос сразу всех данных по эффективности
         let effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
