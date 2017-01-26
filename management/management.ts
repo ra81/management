@@ -46,12 +46,11 @@ function run() {
     let mode = Modes.none;
     let $unitTop = $("#mainContent > table.unit-top")
     let $unitList = $("#mainContent > table.unit-list-2014");
-    let $imgOther = $("#mainContent a.internal_link");
 
-    if ($unitTop.length > 0 && $unitList.length > 0)
+    if (isMyUnitList())
         mode = Modes.self;
 
-    if ($unitList.length > 0 && $imgOther.length > 0)
+    if (isOthersUnitList())
         mode = Modes.other;
 
     // закончить если мы не на той странице

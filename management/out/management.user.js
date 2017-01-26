@@ -147,6 +147,17 @@ function extractFloatPositive(str) {
     return n;
 }
 /**
+ * из указанной строки которая должна быть ссылкой, извлекает числа. обычно это id юнита товара и так далее
+ * @param str
+ */
+function extractIntPositive(str) {
+    var m = cleanStr(str).match(/\d+/ig);
+    if (m == null)
+        return null;
+    var n = m.map(function (val, i, arr) { return numberfyOrError(val, -1); });
+    return n;
+}
+/**
  * По текстовой строке возвращает номер месяца начиная с 0 для января. Либо null
  * @param str очищенная от пробелов и лишних символов строка
  */
@@ -204,29 +215,110 @@ function dateFromShort(str) {
         throw new Error("год неправильная.");
     return new Date(y, m, d);
 }
-var urlUnitMainRx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
-var urlTradeHallRx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
-var urlVisitorsHistoryRx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
+/**
+ * По заданному числу возвращает число с разделителями пробелами для удобства чтения
+ * @param num
+ */
+function sayNumber(num) {
+    if (num < 0)
+        return "-" + sayMoney(-num);
+    if (Math.round(num * 100) / 100 - Math.round(num))
+        num = Math.round(num * 100) / 100;
+    else
+        num = Math.round(num);
+    var s = num.toString();
+    var s1 = "";
+    var l = s.length;
+    var p = s.indexOf(".");
+    if (p > -1) {
+        s1 = s.substr(p);
+        l = p;
+    }
+    else {
+        p = s.indexOf(",");
+        if (p > -1) {
+            s1 = s.substr(p);
+            l = p;
+        }
+    }
+    p = l - 3;
+    while (p >= 0) {
+        s1 = ' ' + s.substr(p, 3) + s1;
+        p -= 3;
+    }
+    if (p > -3) {
+        s1 = s.substr(0, 3 + p) + s1;
+    }
+    if (s1.substr(0, 1) == " ") {
+        s1 = s1.substr(1);
+    }
+    return s1;
+}
+/**
+ * Для денег подставляет нужный символ при выводе на экран
+ * @param num
+ * @param symbol
+ */
+function sayMoney(num, symbol) {
+    var result = sayNumber(num);
+    if (symbol != null) {
+        if (num < 0)
+            result = '-' + symbol + sayNumber(Math.abs(num));
+        else
+            result = symbol + result;
+    }
+    return result;
+}
+var url_company_finance_rep_byUnit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units$/i;
+var url_unit_list_rx = /\/[a-z]+\/main\/company\/view\/\d+(\/unit_list)?$/i;
+var url_unit_main_rx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
+var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i;
+var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
+var url_visitors_history_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
+/**
+ * Проверяет что мы именно на своей странице со списком юнитов. По ссылке и id компании
+ * Проверок по контенту не проводит.
+ */
 function isMyUnitList() {
-    // для ссылки обязательно завершающий unit_list мы так решили
-    var rx = /\/\w+\/main\/company\/view\/\d+\/unit_list\/?$/ig;
-    if (rx.test(document.location.pathname) === false)
+    // для своих и чужих компани ссылка одна, поэтому проверяется и id
+    if (url_unit_list_rx.test(document.location.pathname) === false)
         return false;
-    // помимо ссылки мы можем находиться на чужой странице юнитов
-    if ($("#mainContent > table.unit-top").length === 0
-        || $("#mainContent > table.unit-list-2014").length === 0)
+    var id = getCompanyId();
+    var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+    if (urlId[0] != id)
+        return false;
+    return true;
+}
+/**
+ * Проверяет что мы именно на чужой!! странице со списком юнитов. По ссылке.
+ * Проверок по контенту не проводит.
+ */
+function isOthersUnitList() {
+    // для своих и чужих компани ссылка одна, поэтому проверяется и id
+    if (url_unit_list_rx.test(document.location.pathname) === false)
+        return false;
+    // для чужого списка будет разный айди в дашборде и в ссылке
+    var id = getCompanyId();
+    var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+    if (urlId[0] === id)
         return false;
     return true;
 }
 function isUnitMain() {
-    return urlUnitMainRx.test(document.location.pathname);
+    return url_unit_main_rx.test(document.location.pathname);
+}
+function isUnitFinanceReport() {
+    return url_unit_finance_report.test(document.location.pathname);
+}
+function isCompanyRepByUnit() {
+    return url_company_finance_rep_byUnit.test(document.location.pathname);
 }
 function isShop() {
     var $a = $("ul.tabu a[href$=trading_hall]");
     return $a.length === 1;
 }
 function isVisitorsHistory() {
-    return urlVisitorsHistoryRx.test(document.location.pathname);
+    return url_visitors_history_rx.test(document.location.pathname);
 }
 // JQUERY ----------------------------------------
 /**
@@ -289,6 +381,28 @@ function logDebug(msg) {
     else
         console.log(msg, args);
 }
+// SAVE & LOAD ------------------------------------
+/**
+ * По заданным параметрам создает уникальный ключик использую уникальный одинаковый по всем скриптам префикс
+ * @param realm реалм для которого сейвить. Если кросс реалмово, тогда указать null
+ * @param code строка отличающая данные скрипта от данных другого скрипта
+ * @param subid если для юнита, то указать. иначе пропустить
+ */
+function buildStoreKey(realm, code, subid) {
+    if (code.length === 0)
+        throw new RangeError("Параметр code не может быть равен '' ");
+    if (realm != null && realm.length === 0)
+        throw new RangeError("Параметр realm не может быть равен '' ");
+    if (subid != null && realm == null)
+        throw new RangeError("Как бы нет смысла указывать subid и не указывать realm");
+    var res = "^*"; // уникальная ботва которую добавляем ко всем своим данным
+    if (realm != null)
+        res += "_" + realm;
+    if (subid != null)
+        res += "_" + subid;
+    res += "_" + code;
+    return res;
+}
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 var Modes;
 (function (Modes) {
@@ -304,10 +418,9 @@ function run() {
     var mode = Modes.none;
     var $unitTop = $("#mainContent > table.unit-top");
     var $unitList = $("#mainContent > table.unit-list-2014");
-    var $imgOther = $("#mainContent a.internal_link");
-    if ($unitTop.length > 0 && $unitList.length > 0)
+    if (isMyUnitList())
         mode = Modes.self;
-    if ($unitList.length > 0 && $imgOther.length > 0)
+    if (isOthersUnitList())
         mode = Modes.other;
     // закончить если мы не на той странице
     if (mode === Modes.none) {
