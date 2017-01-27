@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.75
+// @version 	   1.76
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -270,12 +270,24 @@ function sayMoney(num, symbol) {
     }
     return result;
 }
-var url_company_finance_rep_byUnit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units$/i;
-var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?$/i;
-var url_unit_main_rx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
-var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i;
-var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
-var url_visitors_history_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
+// РЕГУЛЯРКИ ДЛЯ ССЫЛОК ------------------------------------
+// для 1 юнита
+// 
+var url_unit_main_rx = /\/\w+\/main\/unit\/view\/\d+\/?$/i; // главная юнита
+var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
+var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
+var url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
+var url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
+// для компании
+// 
+var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
+var url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units$/i; // отчет по подразделениями из отчетов
+var url_rep_ad = /\/[a-z]+\/main\/company\/view\/\d+\/marketing_report\/by_advertising_program$/i; // отчет по рекламным акциям
+var url_manag_equip_rx = /\/[a-z]+\/window\/management_units\/equipment\/(?:buy|repair)$/i; // в окне управления юнитами групповой ремонт или закупка оборудования
+var url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee\/?$/i; // управление - персонал
+// для для виртономики
+// 
+var url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
 /**
  * Проверяет что мы именно на своей странице со списком юнитов. По ссылке и id компании
  * Проверок по контенту не проводит.
@@ -324,15 +336,16 @@ function isUnitFinanceReport() {
     return url_unit_finance_report.test(document.location.pathname);
 }
 function isCompanyRepByUnit() {
-    return url_company_finance_rep_byUnit.test(document.location.pathname);
+    return url_rep_finance_byunit.test(document.location.pathname);
 }
 function isShop() {
     var $a = $("ul.tabu a[href$=trading_hall]");
     return $a.length === 1;
 }
-function isVisitorsHistory() {
-    return url_visitors_history_rx.test(document.location.pathname);
-}
+// let url_visitors_history_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
+//function isVisitorsHistory() {
+//    return url_visitors_history_rx.test(document.location.pathname);
+//}
 // JQUERY ----------------------------------------
 /**
  * Возвращает ближайшего родителя по имени Тэга
@@ -393,6 +406,35 @@ function logDebug(msg) {
         console.log(msg);
     else
         console.log(msg, args);
+}
+/**
+ * определяет есть ли на странице несколько страниц которые нужно перелистывать или все влазит на одну
+ * если не задать аргумента, будет брать текущую страницу
+ * @param $html код страницы которую надо проверить
+ */
+function hasPages($html) {
+    // если не задать данные страницы, то считаем что надо использовать текущую
+    if ($html == null)
+        $html = $(document);
+    // там не только кнопки страниц но еще и текст Страницы в первом li поэтому > 2
+    var $pageLinks = $html.find('ul.pager_list li');
+    return $pageLinks.length > 2;
+}
+/**
+ * Отправляет запрос на установку нужной пагинации. Возвращает promice дальше делай с ним что надо.
+ */
+function repage(pages, $html) {
+    // если не задать данные страницы, то считаем что надо использовать текущую
+    if ($html == null)
+        $html = $(document);
+    // снизу всегда несколько кнопок для числа страниц, НО одна может быть уже нажата мы не знаем какая
+    // берем просто любую ненажатую, извлекаем ее текст, на у далее в ссылке всегда
+    // есть число такое же как текст в кнопке. Заменяем на свое и все ок.
+    var $pager = $html.find('ul.pager_options li').has("a").last();
+    var num = $pager.text().trim();
+    var pagerUrl = $pager.find('a').attr('href').replace(num, pages.toString());
+    // запросили обновление пагинации, дальше юзер решает что ему делать с этим
+    return $.get(pagerUrl);
 }
 // SAVE & LOAD ------------------------------------
 /**
@@ -733,9 +775,10 @@ function parseUnits($rows, mode) {
         var category = $info.attr("class").split("-")[1];
         searchStr += " " + name_1 + " " + url + " " + type + " " + category;
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
-        var $goods = $r.find("td.spec").find("img");
+        var $tdSpec = $r.find("td.spec");
+        var $goods = $tdSpec.find("img");
         var goods = parseImgs($goods);
-        searchStr += " " + nameUrlToString(goods);
+        searchStr += " " + nameUrlToString(goods) + " " + $tdSpec.attr("title");
         // на чужой странице нет проблем и эффективностей
         var problems = [];
         var $eff = $("<br/>");

@@ -432,9 +432,10 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
         searchStr += " " + name + " " + url + " " + type + " " + category;
 
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
-        let $goods = $r.find("td.spec").find("img");
+        let $tdSpec = $r.find("td.spec");
+        let $goods = $tdSpec.find("img");
         let goods = parseImgs($goods);
-        searchStr += " " + nameUrlToString(goods);
+        searchStr += " " + nameUrlToString(goods) + " " + $tdSpec.attr("title");
 
         // на чужой странице нет проблем и эффективностей
         let problems: INameUrl[] = [];
