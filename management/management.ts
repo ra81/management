@@ -45,7 +45,8 @@ function run() {
 
     let mode = Modes.none;
     let $unitTop = $("#mainContent > table.unit-top")
-    let $unitList = $("#mainContent > table.unit-list-2014");
+    //let $unitList = $("#mainContent > table.unit-list-2014");
+    let $unitList = $("table.unit-list-2014"); // на чужом window списке нет хедера с id
 
     if (isMyUnitList())
         mode = Modes.self;

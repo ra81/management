@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.74
+// @version 	   1.75
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
+// @include        https://*virtonomic*.*/*/window/company/view/*
 // @require        https://code.jquery.com/jquery-1.11.1.min.js
 // @noframes
 // ==/UserScript== 
@@ -61,7 +62,7 @@ function getRealm() {
     return m[1];
 }
 /**
- * Парсит id компании со страницы
+ * Парсит id компании со страницы и выдает ошибку если не может спарсить
  */
 function getCompanyId() {
     var str = matchedOrError($("a.dashboard").attr("href"), /\d+/);
@@ -270,7 +271,7 @@ function sayMoney(num, symbol) {
     return result;
 }
 var url_company_finance_rep_byUnit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units$/i;
-var url_unit_list_rx = /\/[a-z]+\/main\/company\/view\/\d+(\/unit_list)?$/i;
+var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?$/i;
 var url_unit_main_rx = /\/\w+\/main\/unit\/view\/\d+\/?$/i;
 var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i;
 var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i;
@@ -283,10 +284,16 @@ function isMyUnitList() {
     // для своих и чужих компани ссылка одна, поэтому проверяется и id
     if (url_unit_list_rx.test(document.location.pathname) === false)
         return false;
-    var id = getCompanyId();
-    var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
-    if (urlId[0] != id)
+    // запрос id может вернуть ошибку если мы на window ссылке. значит точно у чужого васи
+    try {
+        var id = getCompanyId();
+        var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+        if (urlId[0] != id)
+            return false;
+    }
+    catch (err) {
         return false;
+    }
     return true;
 }
 /**
@@ -297,11 +304,17 @@ function isOthersUnitList() {
     // для своих и чужих компани ссылка одна, поэтому проверяется и id
     if (url_unit_list_rx.test(document.location.pathname) === false)
         return false;
-    // для чужого списка будет разный айди в дашборде и в ссылке
-    var id = getCompanyId();
-    var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
-    if (urlId[0] === id)
-        return false;
+    try {
+        // для чужого списка будет разный айди в дашборде и в ссылке
+        var id = getCompanyId();
+        var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+        if (urlId[0] === id)
+            return false;
+    }
+    catch (err) {
+        // походу мы на чужом window списке. значит ок
+        return true;
+    }
     return true;
 }
 function isUnitMain() {
@@ -417,7 +430,8 @@ function run() {
     var realm = getRealm();
     var mode = Modes.none;
     var $unitTop = $("#mainContent > table.unit-top");
-    var $unitList = $("#mainContent > table.unit-list-2014");
+    //let $unitList = $("#mainContent > table.unit-list-2014");
+    var $unitList = $("table.unit-list-2014"); // на чужом window списке нет хедера с id
     if (isMyUnitList())
         mode = Modes.self;
     if (isOthersUnitList())
