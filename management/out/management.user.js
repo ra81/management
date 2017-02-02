@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.76
+// @version 	   1.77
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -60,6 +60,12 @@ function getRealm() {
     if (m == null)
         return null;
     return m[1];
+}
+function getRealmOrError() {
+    var realm = getRealm();
+    if (realm === null)
+        throw new Error("Не смог определить реалм по ссылке " + document.location.href);
+    return realm;
 }
 /**
  * Парсит id компании со страницы и выдает ошибку если не может спарсить
@@ -273,21 +279,22 @@ function sayMoney(num, symbol) {
 // РЕГУЛЯРКИ ДЛЯ ССЫЛОК ------------------------------------
 // для 1 юнита
 // 
-var url_unit_main_rx = /\/\w+\/main\/unit\/view\/\d+\/?$/i; // главная юнита
+var url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // главная юнита
 var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
 var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
 var url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
 var url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
 // для компании
 // 
-var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
-var url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units$/i; // отчет по подразделениями из отчетов
+var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?(\/xiooverview)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
+var url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units(?:\/.*)?$/i; // отчет по подразделениями из отчетов
 var url_rep_ad = /\/[a-z]+\/main\/company\/view\/\d+\/marketing_report\/by_advertising_program$/i; // отчет по рекламным акциям
 var url_manag_equip_rx = /\/[a-z]+\/window\/management_units\/equipment\/(?:buy|repair)$/i; // в окне управления юнитами групповой ремонт или закупка оборудования
 var url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee\/?$/i; // управление - персонал
 // для для виртономики
 // 
 var url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
+var url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
 /**
  * Проверяет что мы именно на своей странице со списком юнитов. По ссылке и id компании
  * Проверок по контенту не проводит.
@@ -329,18 +336,69 @@ function isOthersUnitList() {
     }
     return true;
 }
-function isUnitMain() {
-    return url_unit_main_rx.test(document.location.pathname);
+function isUnitMain(urlPath, html, my) {
+    if (my === void 0) { my = true; }
+    var ok = url_unit_main_rx.test(urlPath);
+    if (!ok)
+        return false;
+    var hasTabs = $(html).find("ul.tabu").length > 0;
+    if (my)
+        return hasTabs;
+    else
+        return !hasTabs;
 }
+//function isOthersUnitMain() {
+//    // проверим линк и затем наличие табулятора. Если он есть то свой юнит, иначе чужой
+//    let ok = url_unit_main_rx.test(document.location.pathname);
+//    if (ok)
+//        ok = $("ul.tabu").length === 0;
+//    return ok;
+//}
 function isUnitFinanceReport() {
     return url_unit_finance_report.test(document.location.pathname);
 }
 function isCompanyRepByUnit() {
     return url_rep_finance_byunit.test(document.location.pathname);
 }
-function isShop() {
-    var $a = $("ul.tabu a[href$=trading_hall]");
-    return $a.length === 1;
+/**
+ * Возвращает Истину если данная страница есть страница в магазине своем или чужом. Иначе Ложь
+ * @param html полностью страница
+ * @param my свой юнит или чужой
+ */
+function isShop(html, my) {
+    if (my === void 0) { my = true; }
+    var $html = $(html);
+    // нет разницы наш или чужой юнит везде картинка мага нужна. ее нет только если window
+    var $img = $html.find("#unitImage img[src*='/shop_']");
+    if ($img.length > 1)
+        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E (" + $img.length + ") \u043A\u0430\u0440\u0442\u0438\u043D\u043E\u043A \u041C\u0430\u0433\u0430\u0437\u0438\u043D\u0430.");
+    return $img.length > 0;
+}
+/**
+ * Возвращает Истину если данная страница есть страница в заправке своей или чужой. Иначе Ложь
+ * @param html полностью страница
+ * @param my свой юнит или чужой
+ */
+function isFuel(html, my) {
+    if (my === void 0) { my = true; }
+    var $html = $(html);
+    // нет разницы наш или чужой юнит везде картинка мага нужна
+    var $img = $html.find("#unitImage img[src*='/fuel_']");
+    if ($img.length > 1)
+        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E (" + $img.length + ") \u043A\u0430\u0440\u0442\u0438\u043D\u043E\u043A \u041C\u0430\u0433\u0430\u0437\u0438\u043D\u0430.");
+    return $img.length > 0;
+}
+function hasTradeHall(html, my) {
+    if (my === void 0) { my = true; }
+    var $html = $(html);
+    if (my) {
+        var $a = $html.find("ul.tabu a[href$=trading_hall]");
+        if ($a.length > 1)
+            throw new Error("Найдено больше одной ссылки на трейдхолл.");
+        return $a.length === 1;
+    }
+    else
+        return false;
 }
 // let url_visitors_history_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/visitors_history\/?/i;
 //function isVisitorsHistory() {
