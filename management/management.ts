@@ -342,7 +342,7 @@ function run() {
 
             let url = `/${realm}/window/unit/productivity_info/${subid}`;
 
-            $td.empty().append($("<img>").attr({ src: "http://www.pixic.ru/i/50V1E3S444O3G076.gif", height: 16, width: 16 }).css('padding-right', '20px'));
+            $td.empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
             $td.addClass("processing");
             $.ajax({
                 url: url,

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.77
+// @version 	   1.78
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -40,6 +40,28 @@ function dict2String(dict) {
  */
 function isOneOf(item, arr) {
     return arr.indexOf(item) >= 0;
+}
+/**
+ * Преобразует массив в словарь используя заданные селектор ключа.
+ * @param arr
+ * @param keySelector
+ */
+function toDictionaryN(arr, keySelector) {
+    var res = {};
+    if (!arr)
+        throw new Error("arr null");
+    if (!keySelector)
+        throw new Error("keySelector null");
+    for (var _i = 0, arr_1 = arr; _i < arr_1.length; _i++) {
+        var el = arr_1[_i];
+        var k = keySelector(el);
+        if (!k)
+            throw new Error("Ключ не может быть неопределен!");
+        if (res[k])
+            throw new Error("Обнаружено повторение ключа!");
+        res[k] = el;
+    }
+    return res;
 }
 // PARSE -------------------------------------------
 /**
@@ -279,6 +301,7 @@ function sayMoney(num, symbol) {
 // РЕГУЛЯРКИ ДЛЯ ССЫЛОК ------------------------------------
 // для 1 юнита
 // 
+var url_unit_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+/i; // внутри юнита. любая страница
 var url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // главная юнита
 var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
 var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
@@ -286,7 +309,7 @@ var url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // зак
 var url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
 // для компании
 // 
-var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?(\/xiooverview)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
+var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?(\/xiooverview|\/overview)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
 var url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units(?:\/.*)?$/i; // отчет по подразделениями из отчетов
 var url_rep_ad = /\/[a-z]+\/main\/company\/view\/\d+\/marketing_report\/by_advertising_program$/i; // отчет по рекламным акциям
 var url_manag_equip_rx = /\/[a-z]+\/window\/management_units\/equipment\/(?:buy|repair)$/i; // в окне управления юнитами групповой ремонт или закупка оборудования
@@ -295,6 +318,33 @@ var url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee
 // 
 var url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
 var url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
+/**
+ * По заданной ссылке и хтмл определяет находимся ли мы внутри юнита или нет.
+ * Если на задавать ссылку и хтмл то берет текущий документ.
+ * Вызов без параметров приводит к определению находимся ли мы своем юните сейчас
+ * @param urlPath
+ * @param $html
+ * @param my своя компания или нет?
+ */
+function isUnit(urlPath, $html, my) {
+    if (my === void 0) { my = true; }
+    if (!urlPath || !$html) {
+        urlPath = document.location.pathname;
+        $html = $(document);
+    }
+    // для ситуации когда мы внутри юнита характерно что всегда ссылка вида 
+    // https://virtonomica.ru/olga/main/unit/view/6452212/*
+    var urlOk = url_unit_rx.test(urlPath);
+    if (!urlOk)
+        return false;
+    // но у своего юнита ссыль на офис имеет тот же айди что и ссыль на дашборду. А для чужого нет
+    var urlOffice = $html.find("div.officePlace a").attr("href");
+    var urlDash = $html.find("a.dashboard").attr("href");
+    if (urlOffice.length === 0 || urlDash.length === 0)
+        throw new Error("Ссылка на офис или дашборду не может быть найдена");
+    var isMy = (urlOffice + "/dashboard" === urlDash);
+    return my ? isMy : !isMy;
+}
 /**
  * Проверяет что мы именно на своей странице со списком юнитов. По ссылке и id компании
  * Проверок по контенту не проводит.
@@ -451,6 +501,104 @@ function oneOrError($item, selector) {
         throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E " + $one.length + " \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u0432 \u0432\u043C\u0435\u0441\u0442\u043E 1 \u0434\u043B\u044F \u0441\u0435\u043B\u0435\u043A\u0442\u043E\u0440\u0430 " + selector);
     return $one;
 }
+// AJAX ----------------------------------------
+/**
+ * Отправляет запрос на установку нужной пагинации. Возвращает promice дальше делай с ним что надо.
+ */
+function doRepage(pages, $html) {
+    // если не задать данные страницы, то считаем что надо использовать текущую
+    if ($html == null)
+        $html = $(document);
+    // снизу всегда несколько кнопок для числа страниц, НО одна может быть уже нажата мы не знаем какая
+    // берем просто любую ненажатую, извлекаем ее текст, на у далее в ссылке всегда
+    // есть число такое же как текст в кнопке. Заменяем на свое и все ок.
+    var $pager = $html.find('ul.pager_options li').has("a").last();
+    var num = $pager.text().trim();
+    var pagerUrl = $pager.find('a').attr('href').replace(num, pages.toString());
+    // запросили обновление пагинации, дальше юзер решает что ему делать с этим
+    var deffered = $.Deferred();
+    $.get(pagerUrl)
+        .done(function (data, status, jqXHR) { return deffered.resolve(data); })
+        .fail(function (err) { return deffered.reject("Не удалось установить пагинацию => " + err); });
+    return deffered.promise();
+}
+/**
+ * Загружается указанную страницу используя заданное число повторов и таймаут. Так же можно задать
+ * нужно ли убирать пагинацию или нет. Если нужно, то функция вернет страничку БЕЗ пагинации
+ * @param url
+ * @param retries число попыток
+ * @param timeout
+ * @param repage нужно ли убирать пагинацию
+ */
+function getPage(url, retries, timeout, repage) {
+    if (retries === void 0) { retries = 10; }
+    if (timeout === void 0) { timeout = 1000; }
+    if (repage === void 0) { repage = true; }
+    var deffered = $.Deferred();
+    // сначала запросим саму страницу с перезапросом по ошибке
+    tryGet(url, retries, timeout)
+        .then(function (html) {
+        var locdef = $.Deferred();
+        if (html == null) {
+            locdef.reject("неизвестная ошибка. страница пришла пустая " + url);
+            return locdef.promise();
+        }
+        // если страниц нет, то как бы не надо ничо репейджить
+        // если не надо репейджить то тоже не будем
+        var $html = $(html);
+        if (!repage || !hasPages($html)) {
+            deffered.resolve(html);
+        }
+        else {
+            // репейджим
+            var purl = getRepageUrl($html, 10000);
+            if (purl == null)
+                locdef.reject("не смог вытащить урл репейджа хотя он там должен быть");
+            else
+                locdef.resolve(purl);
+        }
+        return locdef.promise();
+    }) // если нет репейджа все закончится тут
+        .then(function (purl) {
+        var locdef = $.Deferred();
+        tryGet(purl, retries, timeout)
+            .done(function () { return locdef.resolve(); })
+            .fail(function (err) { return locdef.reject("ошибка репейджа => " + err); });
+        return locdef.promise();
+    }) // запросим установку репейджа
+        .then(function () { return tryGet(url, retries, timeout); }) // снова запросим страницу
+        .then(function (html) { return deffered.resolve(html); })
+        .fail(function (err) { return deffered.reject(err); });
+    return deffered.promise();
+}
+/**
+ * Запрашивает страницу. При ошибке поробует повторить запрос через заданное число секунд.
+ * Пробует заданное число попыток, после чего возвращает reject
+ * @param url
+ * @param retries число попыток загрузки
+ * @param timeout таймаут между попытками
+ */
+function tryGet(url, retries, timeout) {
+    if (retries === void 0) { retries = 10; }
+    if (timeout === void 0) { timeout = 1000; }
+    var deffered = $.Deferred();
+    $.ajax({
+        url: url,
+        type: "GET",
+        success: function (data, status, jqXHR) { return deffered.resolve(data); },
+        error: function (jqXHR, textStatus, errorThrown) {
+            retries--;
+            if (retries <= 0) {
+                deffered.reject("Не смог загрузить страницу " + this.url);
+                return;
+            }
+            logDebug("\u043E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0440\u043E\u0441\u0430 " + this.url + " \u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C " + retries + " \u043F\u043E\u043F\u044B\u0442\u043E\u043A");
+            var _this = this;
+            setTimeout(function () { return $.ajax(_this); }, timeout);
+        }
+    });
+    return deffered.promise();
+}
 // COMMON ----------------------------------------
 var $xioDebug = false;
 function logDebug(msg) {
@@ -479,20 +627,20 @@ function hasPages($html) {
     return $pageLinks.length > 2;
 }
 /**
- * Отправляет запрос на установку нужной пагинации. Возвращает promice дальше делай с ним что надо.
+ * Формирует ссылку на установку новой пагинации. Если страница не имеет пагинатора, вернет null
+ * @param $html
+ * @param pages число элементов на страницу которое установить
  */
-function repage(pages, $html) {
-    // если не задать данные страницы, то считаем что надо использовать текущую
-    if ($html == null)
-        $html = $(document);
+function getRepageUrl($html, pages) {
+    if (pages === void 0) { pages = 10000; }
+    if (!hasPages($html))
+        return null;
     // снизу всегда несколько кнопок для числа страниц, НО одна может быть уже нажата мы не знаем какая
     // берем просто любую ненажатую, извлекаем ее текст, на у далее в ссылке всегда
     // есть число такое же как текст в кнопке. Заменяем на свое и все ок.
     var $pager = $html.find('ul.pager_options li').has("a").last();
     var num = $pager.text().trim();
-    var pagerUrl = $pager.find('a').attr('href').replace(num, pages.toString());
-    // запросили обновление пагинации, дальше юзер решает что ему делать с этим
-    return $.get(pagerUrl);
+    return $pager.find('a').attr('href').replace(num, pages.toString());
 }
 // SAVE & LOAD ------------------------------------
 /**
@@ -760,7 +908,7 @@ function run() {
             if (subid < 0)
                 throw new Error("subid not found for: " + $td);
             var url = "/" + realm + "/window/unit/productivity_info/" + subid;
-            $td.empty().append($("<img>").attr({ src: "http://www.pixic.ru/i/50V1E3S444O3G076.gif", height: 16, width: 16 }).css('padding-right', '20px'));
+            $td.empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
             $td.addClass("processing");
             $.ajax({
                 url: url,
