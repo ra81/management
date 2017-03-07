@@ -1036,6 +1036,7 @@ function run() {
     else
         $panel.wrapAll("<div></div>").closest("div").insertBefore($unitList);
     $panel.show();
+    pager(); // вставлять именно после панели. иначе глюки
     elapsed = (performance.now() - start) / 1000;
     console.log(`manager: ${$rows.length} units parsed  in ${elapsed.toPrecision(3)} sec.`);
     // Функции
@@ -1051,6 +1052,21 @@ function run() {
         out += "}";
         out += "</style>";
         return out;
+    }
+    // вставляет пагинацию до 20000 если ее нет на странице
+    function pager() {
+        let $pager = $("ul.pager_options");
+        if ($pager.text().indexOf("20000") < 0) {
+            let $template = $pager.find("li").has("a").eq(0);
+            let number = getOnlyText($template.find("a").eq(0))[0].trim();
+            let optHtml = [];
+            for (let pages of [1000, 2000, 4000, 10000, 20000]) {
+                let newOptHtml = $template[0].outerHTML.replace(new RegExp(number, "ig"), pages.toString());
+                optHtml.push(newOptHtml);
+            }
+            $pager.append(optHtml.join(" "));
+        }
+        $unitList.before($pager.clone().add($("ul.pager_list").clone()));
     }
     // подсветка красным эффективности меньше 100
     function efficiencyColor(units) {
