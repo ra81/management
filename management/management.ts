@@ -17,6 +17,7 @@ interface IUnit {
     Region: string;
     Town: string;
     Name: string;
+    Tag: string;
     Url: string;
     Type: string;
     Goods: INameUrl[];
@@ -29,6 +30,7 @@ interface IFilterOptions {
     Region: string;
     Town: string;
     Type: string;
+    Tag: string,
     TextRx: string;
     GoodUrl: string;
     ProblemUrl: string;
@@ -244,6 +246,11 @@ function run() {
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
 
+        // фильтр по тегм
+        let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
+        let taggedUnits = units.filter((val, i, arr) => val.Tag.length > 0);
+        let tags = makeKeyValCount<IUnit>(taggedUnits, (el) => el.Tag);
+        tagFilter.append(buildOptions(tags));
 
         // текстовый фильтр
         let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
@@ -317,6 +324,7 @@ function run() {
             $r1.append("<span> </span>").append(effButton);
         }
 
+        $r2.append("<span> Тэг#: </span>").append(tagFilter);
         $r2.append("<span> Rx: </span>").append(textFilter);
         $r2.append("<span id='rows' style='color: blue;'></span>");
 
@@ -451,12 +459,17 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
             searchStr += " " + eff;
         }
 
+        // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
+        // спарсим тег, либо "" если его нет
+        let tg = tag(name);
+
         units.push({
             $row: $r,
             Id: id,
             Region: reg,
             Town: twn,
             Name: name,
+            Tag: tg,
             Url: url,
             Type: type,
             Goods: goods,
@@ -468,6 +481,13 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
     }
 
     return units;
+}
+
+// выделяет из строки так вида tag#чтотоеще. Если такого нет возвращает ""
+function tag(str: string): string {
+    let rx = /^([a-z,0-9]+)#.+/i;
+    let items = rx.exec(str);
+    return items ? items[1] : "";
 }
 
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
@@ -486,6 +506,9 @@ function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
             continue;
 
         if (options.Type != "all" && unit.Type != options.Type)
+            continue;
+
+        if (options.Tag != "all" && unit.Tag != options.Tag)
             continue;
 
         if (textRx.test(unit.SearchString) === false)
@@ -528,6 +551,7 @@ function getFilterOptions($panel: JQuery, mode: Modes): IFilterOptions {
         Region: $panel.find("#regionFilter").val(),
         Town: $panel.find("#townFilter").val(),
         Type: $panel.find("#typeFilter").val(),
+        Tag: $panel.find("#tagFilter").val(),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
         GoodUrl: $panel.find("#goodsFilter").val(),
         ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",

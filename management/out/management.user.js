@@ -1,7 +1,15 @@
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator.throw(value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments)).next());
+    });
+};
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.78
+// @version 	   1.80
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -11,6 +19,70 @@
 // 
 // Набор вспомогательных функций для использования в других проектах. Универсальные
 //   /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
+// список типов юнитов. берется по картинке в юните, или с класса i-farm, i-office в списках юнитов
+var UnitTypes;
+(function (UnitTypes) {
+    UnitTypes[UnitTypes["unknown"] = 0] = "unknown";
+    UnitTypes[UnitTypes["animalfarm"] = 1] = "animalfarm";
+    UnitTypes[UnitTypes["farm"] = 2] = "farm";
+    UnitTypes[UnitTypes["lab"] = 3] = "lab";
+    UnitTypes[UnitTypes["mill"] = 4] = "mill";
+    UnitTypes[UnitTypes["mine"] = 5] = "mine";
+    UnitTypes[UnitTypes["office"] = 6] = "office";
+    UnitTypes[UnitTypes["oilpump"] = 7] = "oilpump";
+    UnitTypes[UnitTypes["orchard"] = 8] = "orchard";
+    UnitTypes[UnitTypes["sawmill"] = 9] = "sawmill";
+    UnitTypes[UnitTypes["shop"] = 10] = "shop";
+    UnitTypes[UnitTypes["seaport"] = 11] = "seaport";
+    UnitTypes[UnitTypes["warehouse"] = 12] = "warehouse";
+    UnitTypes[UnitTypes["workshop"] = 13] = "workshop";
+    UnitTypes[UnitTypes["villa"] = 14] = "villa";
+    UnitTypes[UnitTypes["fishingbase"] = 15] = "fishingbase";
+    UnitTypes[UnitTypes["service_light"] = 16] = "service_light";
+    UnitTypes[UnitTypes["fitness"] = 17] = "fitness";
+    UnitTypes[UnitTypes["medicine"] = 18] = "medicine";
+    UnitTypes[UnitTypes["restaurant"] = 19] = "restaurant";
+    UnitTypes[UnitTypes["laundry"] = 20] = "laundry";
+    UnitTypes[UnitTypes["hairdressing"] = 21] = "hairdressing";
+    UnitTypes[UnitTypes["power"] = 22] = "power";
+    UnitTypes[UnitTypes["coal_power"] = 23] = "coal_power";
+    UnitTypes[UnitTypes["incinerator_power"] = 24] = "incinerator_power";
+    UnitTypes[UnitTypes["fuel"] = 25] = "fuel";
+    UnitTypes[UnitTypes["repair"] = 26] = "repair";
+    UnitTypes[UnitTypes["apiary"] = 27] = "apiary";
+    UnitTypes[UnitTypes["educational"] = 28] = "educational";
+    UnitTypes[UnitTypes["kindergarten"] = 29] = "kindergarten";
+    UnitTypes[UnitTypes["sun_power"] = 30] = "sun_power";
+    UnitTypes[UnitTypes["network"] = 31] = "network";
+    UnitTypes[UnitTypes["it"] = 32] = "it";
+    UnitTypes[UnitTypes["cellular"] = 33] = "cellular";
+})(UnitTypes || (UnitTypes = {}));
+// уровни сервиса
+var ServiceLevels;
+(function (ServiceLevels) {
+    ServiceLevels[ServiceLevels["none"] = -1] = "none";
+    ServiceLevels[ServiceLevels["lower"] = 0] = "lower";
+    ServiceLevels[ServiceLevels["low"] = 1] = "low";
+    ServiceLevels[ServiceLevels["normal"] = 2] = "normal";
+    ServiceLevels[ServiceLevels["high"] = 3] = "high";
+    ServiceLevels[ServiceLevels["higher"] = 4] = "higher";
+    ServiceLevels[ServiceLevels["elite"] = 5] = "elite";
+})(ServiceLevels || (ServiceLevels = {}));
+/**
+ * Простой счетчик. Увеличивается на 1 при каждом вызове метода Next. Нужен для подсчета числа запросов
+ */
+class Counter {
+    constructor() {
+        this.Next = () => {
+            this._count++;
+        };
+        this._count = 0;
+    }
+    ;
+    get Count() {
+        return this._count;
+    }
+}
 /**
  * Проверяет наличие в словаре ключей. Шорт алиас для удобства.
  * Если словарь не задать, вывалит исключение
@@ -28,10 +100,25 @@ function isEmpty(dict) {
 function dict2String(dict) {
     if (isEmpty(dict))
         return "";
-    var newItems = [];
-    for (var key in dict)
+    let newItems = [];
+    for (let key in dict)
         newItems.push(key + ":" + dict[key].toString());
     return newItems.join(", ");
+}
+/**
+ * Фильтрует заданный словарь. Выбирает из него только те элементы которые проходят фильтр.
+ * В любом раскладе возвращает пустой словарь
+ * @param dict
+ * @param selector
+ */
+function filterDictVal(dict, selector) {
+    let res = {};
+    for (let key in dict) {
+        let item = dict[key];
+        if (selector(item))
+            res[key] = item;
+    }
+    return res;
 }
 /**
  * Проверяет что элемент есть в массиве.
@@ -39,6 +126,8 @@ function dict2String(dict) {
  * @param arr массив НЕ null
  */
 function isOneOf(item, arr) {
+    if (arr.length <= 0)
+        return false;
     return arr.indexOf(item) >= 0;
 }
 /**
@@ -47,14 +136,13 @@ function isOneOf(item, arr) {
  * @param keySelector
  */
 function toDictionaryN(arr, keySelector) {
-    var res = {};
+    let res = {};
     if (!arr)
         throw new Error("arr null");
     if (!keySelector)
         throw new Error("keySelector null");
-    for (var _i = 0, arr_1 = arr; _i < arr_1.length; _i++) {
-        var el = arr_1[_i];
-        var k = keySelector(el);
+    for (let el of arr) {
+        let k = keySelector(el);
         if (!k)
             throw new Error("Ключ не может быть неопределен!");
         if (res[k])
@@ -62,6 +150,41 @@ function toDictionaryN(arr, keySelector) {
         res[k] = el;
     }
     return res;
+}
+/**
+ * Возвращает только уникальные значения массива. Для объектов идет сравнение ссылок, само содержимое не сравнивается
+ * @param array
+ */
+function unique(array) {
+    let res = [];
+    for (let i = 0; i < array.length; i++) {
+        let item = array[i];
+        if (array.indexOf(item) === i)
+            res.push(item);
+    }
+    return res;
+}
+/**
+ * Находит пересечение двух массивов. Объекты сравнивать будет по ссылкам. Дубли удаляются.
+ * Возвращает массив уникальных значений имеющихся в обоих массивах
+ * @param a
+ * @param b
+ */
+function intersect(a, b) {
+    // чтобы быстрее бегал indexOf в A кладем более длинный массив
+    if (b.length > a.length) {
+        let t = b;
+        b = a;
+        a = t;
+    }
+    // находим пересечение с дублями
+    let intersect = [];
+    for (let item of a) {
+        if (b.indexOf(item) >= 0)
+            intersect.push(item);
+    }
+    // если надо удалить дубли, удаляем
+    return unique(intersect);
 }
 // PARSE -------------------------------------------
 /**
@@ -77,14 +200,14 @@ function cleanStr(str) {
 function getRealm() {
     // https://*virtonomic*.*/*/main/globalreport/marketing/by_trade_at_cities/*
     // https://*virtonomic*.*/*/window/globalreport/marketing/by_trade_at_cities/*
-    var rx = new RegExp(/https:\/\/virtonomic[A-Za-z]+\.[a-zA-Z]+\/([a-zA-Z]+)\/.+/ig);
-    var m = rx.exec(document.location.href);
+    let rx = new RegExp(/https:\/\/virtonomic[A-Za-z]+\.[a-zA-Z]+\/([a-zA-Z]+)\/.+/ig);
+    let m = rx.exec(document.location.href);
     if (m == null)
         return null;
     return m[1];
 }
 function getRealmOrError() {
-    var realm = getRealm();
+    let realm = getRealm();
     if (realm === null)
         throw new Error("Не смог определить реалм по ссылке " + document.location.href);
     return realm;
@@ -93,11 +216,11 @@ function getRealmOrError() {
  * Парсит id компании со страницы и выдает ошибку если не может спарсить
  */
 function getCompanyId() {
-    var str = matchedOrError($("a.dashboard").attr("href"), /\d+/);
+    let str = matchedOrError($("a.dashboard").attr("href"), /\d+/);
     return numberfyOrError(str);
 }
 /**
- * Оцифровывает строку. Возвращает всегда либо число или Number.POSITIVE_INFINITY либо -1 если отпарсить не вышло.
+ * Оцифровывает строку. Возвращает всегда либо число или Number.POSITIVE_INFINITY либо -1 если str не содержит числа.
  * @param variable любая строка.
  */
 function numberfy(str) {
@@ -114,21 +237,20 @@ function numberfy(str) {
     else {
         // если str будет undef null или что то страшное, то String() превратит в строку после чего парсинг даст NaN
         // не будет эксепшнов
-        var n = parseFloat(cleanStr(String(str)));
+        let n = parseFloat(cleanStr(String(str)));
         return isNaN(n) ? -1 : n;
     }
 }
 /**
  * Пробуем оцифровать данные но если они выходят как Number.POSITIVE_INFINITY или <= minVal, валит ошибку.
    смысл в быстром вываливании ошибки если парсинг текста должен дать число
+   Нужно понимать что если оцифровка не удалась, то получится -1 и при minVal=0 выдаст ошибку конечно
  * @param value строка являющая собой число больше minVal
  * @param minVal ограничение снизу. Число.
  * @param infinity разрешена ли бесконечность
  */
-function numberfyOrError(str, minVal, infinity) {
-    if (minVal === void 0) { minVal = 0; }
-    if (infinity === void 0) { infinity = false; }
-    var n = numberfy(str);
+function numberfyOrError(str, minVal = 0, infinity = false) {
+    let n = numberfy(str);
     if (!infinity && (n === Number.POSITIVE_INFINITY || n === Number.NEGATIVE_INFINITY))
         throw new RangeError("Получили бесконечность, что запрещено.");
     if (n <= minVal)
@@ -142,11 +264,11 @@ function numberfyOrError(str, minVal, infinity) {
  * @param rx паттерн который ищем
  */
 function matchedOrError(str, rx, errMsg) {
-    var m = str.match(rx);
+    let m = str.match(rx);
     if (m == null)
-        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str);
+        throw new Error(errMsg || `Паттерн ${rx} не найден в ${str}`);
     if (m.length > 1)
-        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str + " " + m.length + " \u0440\u0430\u0437 \u0432\u043C\u0435\u0441\u0442\u043E \u043E\u0436\u0438\u0434\u0430\u0435\u043C\u043E\u0433\u043E 1");
+        throw new Error(errMsg || `Паттерн ${rx} найден в ${str} ${m.length} раз вместо ожидаемого 1`);
     return m[0];
 }
 /**
@@ -157,9 +279,9 @@ function matchedOrError(str, rx, errMsg) {
  * @param errMsg
  */
 function execOrError(str, rx, errMsg) {
-    var m = rx.exec(str);
+    let m = rx.exec(str);
     if (m == null)
-        throw new Error(errMsg || "\u041F\u0430\u0442\u0442\u0435\u0440\u043D " + rx + " \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 " + str);
+        throw new Error(errMsg || `Паттерн ${rx} не найден в ${str}`);
     return m;
 }
 /**
@@ -169,21 +291,21 @@ function execOrError(str, rx, errMsg) {
  * @param str
  */
 function extractFloatPositive(str) {
-    var m = cleanStr(str).match(/\d+\.\d+/ig);
+    let m = cleanStr(str).match(/\d+\.\d+/ig);
     if (m == null)
         return null;
-    var n = m.map(function (i, e) { return numberfyOrError($(e).text(), -1); });
+    let n = m.map((val, i, arr) => numberfyOrError(val, -1));
     return n;
 }
 /**
- * из указанной строки которая должна быть ссылкой, извлекает числа. обычно это id юнита товара и так далее
+ * из указанной строки, извлекает числа. обычно это id юнита товара и так далее
  * @param str
  */
 function extractIntPositive(str) {
-    var m = cleanStr(str).match(/\d+/ig);
+    let m = cleanStr(str).match(/\d+/ig);
     if (m == null)
         return null;
-    var n = m.map(function (val, i, arr) { return numberfyOrError(val, -1); });
+    let n = m.map((val, i, arr) => numberfyOrError(val, -1));
     return n;
 }
 /**
@@ -191,8 +313,8 @@ function extractIntPositive(str) {
  * @param str очищенная от пробелов и лишних символов строка
  */
 function monthFromStr(str) {
-    var mnth = ["янв", "февр", "мар", "апр", "май", "июн", "июл", "авг", "сент", "окт", "нояб", "дек"];
-    for (var i = 0; i < mnth.length; i++) {
+    let mnth = ["январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"];
+    for (let i = 0; i < mnth.length; i++) {
         if (str.indexOf(mnth[i]) === 0)
             return i;
     }
@@ -204,15 +326,15 @@ function monthFromStr(str) {
  * @param str
  */
 function extractDate(str) {
-    var dateRx = /^(\d{1,2})\s+([а-я]+)\s+(\d{1,4})/i;
-    var m = dateRx.exec(str);
+    let dateRx = /^(\d{1,2})\s+([а-я]+)\s+(\d{1,4})/i;
+    let m = dateRx.exec(str);
     if (m == null)
         return null;
-    var d = parseInt(m[1]);
-    var mon = monthFromStr(m[2]);
+    let d = parseInt(m[1]);
+    let mon = monthFromStr(m[2]);
     if (mon == null)
         return null;
-    var y = parseInt(m[3]);
+    let y = parseInt(m[3]);
     return new Date(y, mon, d);
 }
 /**
@@ -220,26 +342,26 @@ function extractDate(str) {
  * @param date
  */
 function dateToShort(date) {
-    var d = date.getDate();
-    var m = date.getMonth() + 1;
-    var yyyy = date.getFullYear();
-    var dStr = d < 10 ? "0" + d : d.toString();
-    var mStr = m < 10 ? "0" + m : m.toString();
-    return dStr + "." + mStr + "." + yyyy;
+    let d = date.getDate();
+    let m = date.getMonth() + 1;
+    let yyyy = date.getFullYear();
+    let dStr = d < 10 ? "0" + d : d.toString();
+    let mStr = m < 10 ? "0" + m : m.toString();
+    return `${dStr}.${mStr}.${yyyy}`;
 }
 /**
  * из строки вида 01.12.2017 формирует дату
  * @param str
  */
 function dateFromShort(str) {
-    var items = str.split(".");
-    var d = parseInt(items[0]);
+    let items = str.split(".");
+    let d = parseInt(items[0]);
     if (d <= 0)
         throw new Error("дата неправильная.");
-    var m = parseInt(items[1]) - 1;
+    let m = parseInt(items[1]) - 1;
     if (m < 0)
         throw new Error("месяц неправильная.");
-    var y = parseInt(items[2]);
+    let y = parseInt(items[2]);
     if (y < 0)
         throw new Error("год неправильная.");
     return new Date(y, m, d);
@@ -255,10 +377,10 @@ function sayNumber(num) {
         num = Math.round(num * 100) / 100;
     else
         num = Math.round(num);
-    var s = num.toString();
-    var s1 = "";
-    var l = s.length;
-    var p = s.indexOf(".");
+    let s = num.toString();
+    let s1 = "";
+    let l = s.length;
+    let p = s.indexOf(".");
     if (p > -1) {
         s1 = s.substr(p);
         l = p;
@@ -289,7 +411,7 @@ function sayNumber(num) {
  * @param symbol
  */
 function sayMoney(num, symbol) {
-    var result = sayNumber(num);
+    let result = sayNumber(num);
     if (symbol != null) {
         if (num < 0)
             result = '-' + symbol + sayNumber(Math.abs(num));
@@ -298,26 +420,64 @@ function sayMoney(num, symbol) {
     }
     return result;
 }
+/**
+ * Пробует взять со страницы картинку юнита и спарсить тип юнита
+ * Пример сорса /img/v2/units/shop_1.gif  будет тип shop.
+ * Он кореллирует четко с i-shop в списке юнитов
+ * Если картинки на странице нет, то вернет null. Сам разбирайся почему ее там нет
+ * @param $html
+ */
+function getUnitType($html) {
+    let $div = $html.find("#unitImage");
+    if ($div.length === 0)
+        return null;
+    let src = $div.find("img").attr("src");
+    let items = src.split("/");
+    if (items.length < 2)
+        throw new Error("Что то не так с урлом картинки " + src);
+    let typeStr = items[items.length - 1].split("_")[0];
+    let type = UnitTypes[typeStr] ? UnitTypes[typeStr] : UnitTypes.unknown;
+    if (type == UnitTypes.unknown)
+        throw new Error("Не описан тип юнита " + typeStr);
+    return type;
+}
+/**
+ * Форматирует строки в соответствии с форматом в C#. Плейсхолдеры {0}, {1} заменяет на аргументы.
+   если аргумента НЕТ а плейсхолдер есть, вывалит исключение, как и в сишарпе.
+ * @param str шаблон строки
+ * @param args аргументы которые подставить
+ */
+function formatStr(str, ...args) {
+    let res = str.replace(/{(\d+)}/g, (match, number) => {
+        if (args[number] == null)
+            throw new Error(`плейсхолдер ${number} не имеет значения`);
+        return args[number];
+    });
+    return res;
+}
 // РЕГУЛЯРКИ ДЛЯ ССЫЛОК ------------------------------------
 // для 1 юнита
 // 
-var url_unit_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+/i; // внутри юнита. любая страница
-var url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // главная юнита
-var url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
-var url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
-var url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
-var url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
+let url_unit_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+/i; // внутри юнита. любая страница
+let url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // главная юнита
+let url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
+let url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
+let url_price_history_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+\/product_history\/\d+\/?$/i; // история продаж в магазине по товару
+let url_supp_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/supply\/?/i; // снабжение
+let url_sale_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/sale/i; // продажа склад/завод
+let url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
+let url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
 // для компании
 // 
-var url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?(\/xiooverview|\/overview)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
-var url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units(?:\/.*)?$/i; // отчет по подразделениями из отчетов
-var url_rep_ad = /\/[a-z]+\/main\/company\/view\/\d+\/marketing_report\/by_advertising_program$/i; // отчет по рекламным акциям
-var url_manag_equip_rx = /\/[a-z]+\/window\/management_units\/equipment\/(?:buy|repair)$/i; // в окне управления юнитами групповой ремонт или закупка оборудования
-var url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee\/?$/i; // управление - персонал
+let url_unit_list_rx = /\/[a-z]+\/(?:main|window)\/company\/view\/\d+(\/unit_list)?(\/xiooverview|\/overview)?$/i; // список юнитов. Работает и для списка юнитов чужой компании
+let url_rep_finance_byunit = /\/[a-z]+\/main\/company\/view\/\d+\/finance_report\/by_units(?:\/.*)?$/i; // отчет по подразделениями из отчетов
+let url_rep_ad = /\/[a-z]+\/main\/company\/view\/\d+\/marketing_report\/by_advertising_program$/i; // отчет по рекламным акциям
+let url_manag_equip_rx = /\/[a-z]+\/window\/management_units\/equipment\/(?:buy|repair)$/i; // в окне управления юнитами групповой ремонт или закупка оборудования
+let url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee\/?$/i; // управление - персонал
 // для для виртономики
 // 
-var url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
-var url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
+let url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
+let url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
 /**
  * По заданной ссылке и хтмл определяет находимся ли мы внутри юнита или нет.
  * Если на задавать ссылку и хтмл то берет текущий документ.
@@ -326,23 +486,22 @@ var url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i
  * @param $html
  * @param my своя компания или нет?
  */
-function isUnit(urlPath, $html, my) {
-    if (my === void 0) { my = true; }
+function isUnit(urlPath, $html, my = true) {
     if (!urlPath || !$html) {
         urlPath = document.location.pathname;
         $html = $(document);
     }
     // для ситуации когда мы внутри юнита характерно что всегда ссылка вида 
     // https://virtonomica.ru/olga/main/unit/view/6452212/*
-    var urlOk = url_unit_rx.test(urlPath);
+    let urlOk = url_unit_rx.test(urlPath);
     if (!urlOk)
         return false;
     // но у своего юнита ссыль на офис имеет тот же айди что и ссыль на дашборду. А для чужого нет
-    var urlOffice = $html.find("div.officePlace a").attr("href");
-    var urlDash = $html.find("a.dashboard").attr("href");
+    let urlOffice = $html.find("div.officePlace a").attr("href");
+    let urlDash = $html.find("a.dashboard").attr("href");
     if (urlOffice.length === 0 || urlDash.length === 0)
         throw new Error("Ссылка на офис или дашборду не может быть найдена");
-    var isMy = (urlOffice + "/dashboard" === urlDash);
+    let isMy = (`${urlOffice}/dashboard` === urlDash);
     return my ? isMy : !isMy;
 }
 /**
@@ -355,8 +514,8 @@ function isMyUnitList() {
         return false;
     // запрос id может вернуть ошибку если мы на window ссылке. значит точно у чужого васи
     try {
-        var id = getCompanyId();
-        var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+        let id = getCompanyId();
+        let urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
         if (urlId[0] != id)
             return false;
     }
@@ -375,8 +534,8 @@ function isOthersUnitList() {
         return false;
     try {
         // для чужого списка будет разный айди в дашборде и в ссылке
-        var id = getCompanyId();
-        var urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
+        let id = getCompanyId();
+        let urlId = extractIntPositive(document.location.pathname); // полюбому число есть иначе регекс не пройдет
         if (urlId[0] === id)
             return false;
     }
@@ -386,12 +545,11 @@ function isOthersUnitList() {
     }
     return true;
 }
-function isUnitMain(urlPath, html, my) {
-    if (my === void 0) { my = true; }
-    var ok = url_unit_main_rx.test(urlPath);
+function isUnitMain(urlPath, html, my = true) {
+    let ok = url_unit_main_rx.test(urlPath);
     if (!ok)
         return false;
-    var hasTabs = $(html).find("ul.tabu").length > 0;
+    let hasTabs = $(html).find("ul.tabu").length > 0;
     if (my)
         return hasTabs;
     else
@@ -415,13 +573,12 @@ function isCompanyRepByUnit() {
  * @param html полностью страница
  * @param my свой юнит или чужой
  */
-function isShop(html, my) {
-    if (my === void 0) { my = true; }
-    var $html = $(html);
+function isShop(html, my = true) {
+    let $html = $(html);
     // нет разницы наш или чужой юнит везде картинка мага нужна. ее нет только если window
-    var $img = $html.find("#unitImage img[src*='/shop_']");
+    let $img = $html.find("#unitImage img[src*='/shop_']");
     if ($img.length > 1)
-        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E (" + $img.length + ") \u043A\u0430\u0440\u0442\u0438\u043D\u043E\u043A \u041C\u0430\u0433\u0430\u0437\u0438\u043D\u0430.");
+        throw new Error(`Найдено несколько (${$img.length}) картинок Магазина.`);
     return $img.length > 0;
 }
 /**
@@ -429,20 +586,18 @@ function isShop(html, my) {
  * @param html полностью страница
  * @param my свой юнит или чужой
  */
-function isFuel(html, my) {
-    if (my === void 0) { my = true; }
-    var $html = $(html);
+function isFuel(html, my = true) {
+    let $html = $(html);
     // нет разницы наш или чужой юнит везде картинка мага нужна
-    var $img = $html.find("#unitImage img[src*='/fuel_']");
+    let $img = $html.find("#unitImage img[src*='/fuel_']");
     if ($img.length > 1)
-        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E (" + $img.length + ") \u043A\u0430\u0440\u0442\u0438\u043D\u043E\u043A \u041C\u0430\u0433\u0430\u0437\u0438\u043D\u0430.");
+        throw new Error(`Найдено несколько (${$img.length}) картинок Магазина.`);
     return $img.length > 0;
 }
-function hasTradeHall(html, my) {
-    if (my === void 0) { my = true; }
-    var $html = $(html);
+function hasTradeHall(html, my = true) {
+    let $html = $(html);
     if (my) {
-        var $a = $html.find("ul.tabu a[href$=trading_hall]");
+        let $a = $html.find("ul.tabu a[href$=trading_hall]");
         if ($a.length > 1)
             throw new Error("Найдено больше одной ссылки на трейдхолл.");
         return $a.length === 1;
@@ -463,10 +618,10 @@ function hasTradeHall(html, my) {
  * @param tagname имя тэга. tr, td, span и так далее
  */
 function closestByTagName(items, tagname) {
-    var tag = tagname.toUpperCase();
-    var found = [];
-    for (var i = 0; i < items.length; i++) {
-        var node = items[i];
+    let tag = tagname.toUpperCase();
+    let found = [];
+    for (let i = 0; i < items.length; i++) {
+        let node = items[i];
         while ((node = node.parentNode) && node.nodeName != tag) { }
         ;
         if (node)
@@ -481,10 +636,10 @@ function closestByTagName(items, tagname) {
  */
 function getOnlyText(item) {
     // просто children() не отдает текстовые ноды.
-    var $childrenNodes = item.contents();
-    var res = [];
-    for (var i = 0; i < $childrenNodes.length; i++) {
-        var el = $childrenNodes.get(i);
+    let $childrenNodes = item.contents();
+    let res = [];
+    for (let i = 0; i < $childrenNodes.length; i++) {
+        let el = $childrenNodes.get(i);
         if (el.nodeType === 3)
             res.push($(el).text()); // так как в разных браузерах текст запрашивается по разному, 
     }
@@ -496,9 +651,9 @@ function getOnlyText(item) {
  * @param selector
  */
 function oneOrError($item, selector) {
-    var $one = $item.find(selector);
+    let $one = $item.find(selector);
     if ($one.length != 1)
-        throw new Error("\u041D\u0430\u0439\u0434\u0435\u043D\u043E " + $one.length + " \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u0432 \u0432\u043C\u0435\u0441\u0442\u043E 1 \u0434\u043B\u044F \u0441\u0435\u043B\u0435\u043A\u0442\u043E\u0440\u0430 " + selector);
+        throw new Error(`Найдено ${$one.length} элементов вместо 1 для селектора ${selector}`);
     return $one;
 }
 // AJAX ----------------------------------------
@@ -512,14 +667,14 @@ function doRepage(pages, $html) {
     // снизу всегда несколько кнопок для числа страниц, НО одна может быть уже нажата мы не знаем какая
     // берем просто любую ненажатую, извлекаем ее текст, на у далее в ссылке всегда
     // есть число такое же как текст в кнопке. Заменяем на свое и все ок.
-    var $pager = $html.find('ul.pager_options li').has("a").last();
-    var num = $pager.text().trim();
-    var pagerUrl = $pager.find('a').attr('href').replace(num, pages.toString());
+    let $pager = $html.find('ul.pager_options li').has("a").last();
+    let num = $pager.text().trim();
+    let pagerUrl = $pager.find('a').attr('href').replace(num, pages.toString());
     // запросили обновление пагинации, дальше юзер решает что ему делать с этим
-    var deffered = $.Deferred();
+    let deffered = $.Deferred();
     $.get(pagerUrl)
-        .done(function (data, status, jqXHR) { return deffered.resolve(data); })
-        .fail(function (err) { return deffered.reject("Не удалось установить пагинацию => " + err); });
+        .done((data, status, jqXHR) => deffered.resolve(data))
+        .fail((err) => deffered.reject("Не удалось установить пагинацию => " + err));
     return deffered.promise();
 }
 /**
@@ -530,28 +685,25 @@ function doRepage(pages, $html) {
  * @param timeout
  * @param repage нужно ли убирать пагинацию
  */
-function getPage(url, retries, timeout, repage) {
-    if (retries === void 0) { retries = 10; }
-    if (timeout === void 0) { timeout = 1000; }
-    if (repage === void 0) { repage = true; }
-    var deffered = $.Deferred();
+function getPage(url, retries = 10, timeout = 1000, repage = true) {
+    let deffered = $.Deferred();
     // сначала запросим саму страницу с перезапросом по ошибке
     tryGet(url, retries, timeout)
-        .then(function (html) {
-        var locdef = $.Deferred();
+        .then((html) => {
+        let locdef = $.Deferred();
         if (html == null) {
             locdef.reject("неизвестная ошибка. страница пришла пустая " + url);
             return locdef.promise();
         }
         // если страниц нет, то как бы не надо ничо репейджить
         // если не надо репейджить то тоже не будем
-        var $html = $(html);
+        let $html = $(html);
         if (!repage || !hasPages($html)) {
             deffered.resolve(html);
         }
         else {
             // репейджим
-            var purl = getRepageUrl($html, 10000);
+            let purl = getRepageUrl($html, 10000);
             if (purl == null)
                 locdef.reject("не смог вытащить урл репейджа хотя он там должен быть");
             else
@@ -559,16 +711,16 @@ function getPage(url, retries, timeout, repage) {
         }
         return locdef.promise();
     }) // если нет репейджа все закончится тут
-        .then(function (purl) {
-        var locdef = $.Deferred();
+        .then((purl) => {
+        let locdef = $.Deferred();
         tryGet(purl, retries, timeout)
-            .done(function () { return locdef.resolve(); })
-            .fail(function (err) { return locdef.reject("ошибка репейджа => " + err); });
+            .done(() => locdef.resolve())
+            .fail((err) => locdef.reject("ошибка репейджа => " + err));
         return locdef.promise();
     }) // запросим установку репейджа
-        .then(function () { return tryGet(url, retries, timeout); }) // снова запросим страницу
-        .then(function (html) { return deffered.resolve(html); })
-        .fail(function (err) { return deffered.reject(err); });
+        .then(() => tryGet(url, retries, timeout)) // снова запросим страницу
+        .then((html) => deffered.resolve(html))
+        .fail((err) => deffered.reject(err));
     return deffered.promise();
 }
 /**
@@ -578,34 +730,148 @@ function getPage(url, retries, timeout, repage) {
  * @param retries число попыток загрузки
  * @param timeout таймаут между попытками
  */
-function tryGet(url, retries, timeout) {
-    if (retries === void 0) { retries = 10; }
-    if (timeout === void 0) { timeout = 1000; }
-    var deffered = $.Deferred();
+function tryGet(url, retries = 10, timeout = 1000) {
+    let $deffered = $.Deferred();
+    $deffered.notify("0: " + url); // сразу даем уведомление, это работает. НО только 1 сработает если вызвать ДО установки прогресс хендлера на промис
     $.ajax({
         url: url,
         type: "GET",
-        success: function (data, status, jqXHR) { return deffered.resolve(data); },
+        success: (data, status, jqXHR) => $deffered.resolve(data),
         error: function (jqXHR, textStatus, errorThrown) {
             retries--;
             if (retries <= 0) {
-                deffered.reject("Не смог загрузить страницу " + this.url);
+                $deffered.reject("Не смог загрузить страницу " + this.url);
                 return;
             }
-            logDebug("\u043E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0440\u043E\u0441\u0430 " + this.url + " \u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C " + retries + " \u043F\u043E\u043F\u044B\u0442\u043E\u043A");
-            var _this = this;
-            setTimeout(function () { return $.ajax(_this); }, timeout);
+            logDebug(`ошибка запроса ${this.url} осталось ${retries} попыток`);
+            let _this = this;
+            setTimeout(() => {
+                $deffered.notify("0: " + url); // уведомляем об очередном запросе
+                $.ajax(_this);
+            }, timeout);
         }
     });
-    return deffered.promise();
+    return $deffered.promise();
+}
+/**
+ * Запрашивает страницу. При ошибке поробует повторить запрос через заданное число секунд.
+ * Пробует заданное число попыток, после чего возвращает reject.
+ * При ресолве вернет текст страницы, а при реджекте вернет Error объект
+ * @param url
+ * @param retries число попыток загрузки
+ * @param timeout таймаут между попытками
+ * @param beforeGet вызывается перед каждым новым запросом. То есть число вызовов равно числу запросов. Каждый раз вызывается с урлом которые запрашивается.
+ */
+function tryGet_async(url, retries = 10, timeout = 1000, beforeGet, onError) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // сам метод пришлось делать Promise<any> потому что string | Error не работало какого то хуя не знаю. Из за стрик нулл чек
+        let $deffered = $.Deferred();
+        if (beforeGet) {
+            try {
+                beforeGet(url);
+            }
+            catch (err) {
+                logDebug("beforeGet вызвал исключение", err);
+            }
+        }
+        $.ajax({
+            url: url,
+            type: "GET",
+            success: (data, status, jqXHR) => $deffered.resolve(data),
+            error: function (jqXHR, textStatus, errorThrown) {
+                if (onError) {
+                    try {
+                        onError(url);
+                    }
+                    catch (err) {
+                        logDebug("onError вызвал исключение", err);
+                    }
+                }
+                retries--;
+                if (retries <= 0) {
+                    let err = new Error(`can't get ${this.url}\nstatus: ${jqXHR.status}\ntextStatus: ${jqXHR.statusText}\nerror: ${errorThrown}`);
+                    $deffered.reject(err);
+                    return;
+                }
+                //logDebug(`ошибка запроса ${this.url} осталось ${retries} попыток`);
+                let _this = this;
+                setTimeout(() => {
+                    if (beforeGet) {
+                        try {
+                            beforeGet(url);
+                        }
+                        catch (err) {
+                            logDebug("beforeGet вызвал исключение", err);
+                        }
+                    }
+                    $.ajax(_this);
+                }, timeout);
+            }
+        });
+        return $deffered.promise();
+    });
+}
+/**
+ * Отправляет данные на сервер запросом POST. В остальном работает как и гет. Так же вернет промис который ресолвит с возвращенными данными
+ * @param url
+ * @param form данные для отправки на сервер
+ * @param retries
+ * @param timeout
+ * @param beforePost
+ */
+function tryPost_async(url, form, retries = 10, timeout = 1000, beforePost, onError) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // сам метод пришлось делать Promise<any> потому что string | Error не работало какого то хуя не знаю. Из за стрик нулл чек
+        let $deferred = $.Deferred();
+        if (beforePost) {
+            try {
+                beforePost(url);
+            }
+            catch (err) {
+                logDebug("beforePost вызвал исключение", err);
+            }
+        }
+        $.ajax({
+            url: url,
+            data: form,
+            type: "POST",
+            success: (data, status, jqXHR) => $deferred.resolve(data),
+            error: function (jqXHR, textStatus, errorThrown) {
+                if (onError) {
+                    try {
+                        onError(url);
+                    }
+                    catch (err) {
+                        logDebug("onError вызвал исключение", err);
+                    }
+                }
+                retries--;
+                if (retries <= 0) {
+                    let err = new Error(`can't post ${this.url}\nstatus: ${jqXHR.status}\ntextStatus: ${jqXHR.statusText}\nerror: ${errorThrown}`);
+                    $deferred.reject(err);
+                    return;
+                }
+                //logDebug(`ошибка запроса ${this.url} осталось ${retries} попыток`);
+                let _this = this;
+                setTimeout(() => {
+                    if (beforePost) {
+                        try {
+                            beforePost(url);
+                        }
+                        catch (err) {
+                            logDebug("beforePost вызвал исключение", err);
+                        }
+                    }
+                    $.ajax(_this);
+                }, timeout);
+            }
+        });
+        return $deferred.promise();
+    });
 }
 // COMMON ----------------------------------------
-var $xioDebug = false;
-function logDebug(msg) {
-    var args = [];
-    for (var _i = 1; _i < arguments.length; _i++) {
-        args[_i - 1] = arguments[_i];
-    }
+let $xioDebug = false;
+function logDebug(msg, ...args) {
     if (!$xioDebug)
         return;
     if (args.length === 0)
@@ -623,7 +889,7 @@ function hasPages($html) {
     if ($html == null)
         $html = $(document);
     // там не только кнопки страниц но еще и текст Страницы в первом li поэтому > 2
-    var $pageLinks = $html.find('ul.pager_list li');
+    let $pageLinks = $html.find('ul.pager_list li');
     return $pageLinks.length > 2;
 }
 /**
@@ -631,15 +897,14 @@ function hasPages($html) {
  * @param $html
  * @param pages число элементов на страницу которое установить
  */
-function getRepageUrl($html, pages) {
-    if (pages === void 0) { pages = 10000; }
+function getRepageUrl($html, pages = 10000) {
     if (!hasPages($html))
         return null;
     // снизу всегда несколько кнопок для числа страниц, НО одна может быть уже нажата мы не знаем какая
     // берем просто любую ненажатую, извлекаем ее текст, на у далее в ссылке всегда
     // есть число такое же как текст в кнопке. Заменяем на свое и все ок.
-    var $pager = $html.find('ul.pager_options li').has("a").last();
-    var num = $pager.text().trim();
+    let $pager = $html.find('ul.pager_options li').has("a").last();
+    let num = $pager.text().trim();
     return $pager.find('a').attr('href').replace(num, pages.toString());
 }
 // SAVE & LOAD ------------------------------------
@@ -656,13 +921,69 @@ function buildStoreKey(realm, code, subid) {
         throw new RangeError("Параметр realm не может быть равен '' ");
     if (subid != null && realm == null)
         throw new RangeError("Как бы нет смысла указывать subid и не указывать realm");
-    var res = "^*"; // уникальная ботва которую добавляем ко всем своим данным
+    let res = "^*"; // уникальная ботва которую добавляем ко всем своим данным
     if (realm != null)
         res += "_" + realm;
     if (subid != null)
         res += "_" + subid;
     res += "_" + code;
     return res;
+}
+/**
+ * Выводит текстовое поле, куда выводит все ключи с содержимым в формате ключ=значение|ключи=значение...
+ * @param test функция возвращающая ИСТИНУ если данный ключик надо экспортить, иначе ЛОЖЬ
+ * @param $place элемент страницы в который будет добавлено текстовое поле для вывода
+ */
+function Export($place, test) {
+    if ($place.length <= 0)
+        return false;
+    let $txt = $('<textarea style="width: 800px; height: 200px"></textarea>');
+    let string = "";
+    for (let key in localStorage) {
+        if (!test(key))
+            continue;
+        if (string.length > 0)
+            string += "|";
+        string += `${key}=${localStorage[key]}`;
+    }
+    $txt.text(string);
+    $place.append("<br>").append($txt);
+    return true;
+}
+/**
+ * Импортирует в кэш данные введенные к текстовое окно. Формат данных такой же как в экспорте
+ * Ключ=Значение|Ключ=Значение итд.
+ * Если что то не заладится, будет выпадать с ошибкой. Существующие ключи перезаписывает, с уведомление в консоли
+ * @param $place элемент страницы в который будет добавлено текстовое поле для ввода
+ */
+function Import($place) {
+    if ($place.length <= 0)
+        return false;
+    let $txt = $('<textarea style="width: 800px; height: 200px"></textarea>');
+    let $saveBtn = $(`<input type=button disabled="true" value="Save!">`);
+    $txt.on("input propertychange", (event) => $saveBtn.prop("disabled", false));
+    $saveBtn.on("click", (event) => {
+        let items = $txt.val().split("|"); // элементы вида Ключ=значение
+        logDebug(`загружено ${items.length} элементов`);
+        items.forEach((val, i, arr) => {
+            let item = val.trim();
+            if (item.length <= 0)
+                throw new Error(`получили пустую строку для элемента ${i}, невозможно импортировать.`);
+            let kvp = item.split("="); // пара ключ значение
+            if (kvp.length !== 2)
+                throw new Error("Должен быть только ключ и значение а по факту не так. " + item);
+            let storeKey = kvp[0].trim();
+            let storeVal = kvp[1].trim();
+            if (storeKey.length <= 0 || storeVal.length <= 0)
+                throw new Error("Длина ключа или данных равна 0 " + item);
+            if (localStorage[storeKey])
+                logDebug(`Ключ ${storeKey} существует. Перезаписываем.`);
+            localStorage[storeKey] = storeVal;
+        });
+        logDebug("импорт завершен");
+    });
+    $place.append("<br>").append($txt).append("<br>").append($saveBtn);
+    return true;
 }
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 var Modes;
@@ -672,14 +993,14 @@ var Modes;
     Modes[Modes["other"] = 2] = "other";
 })(Modes || (Modes = {}));
 function run() {
-    var start = performance.now();
-    var elapsed = 0;
-    var $ = jQuery;
-    var realm = getRealm();
-    var mode = Modes.none;
-    var $unitTop = $("#mainContent > table.unit-top");
+    let start = performance.now();
+    let elapsed = 0;
+    let $ = jQuery;
+    let realm = getRealm();
+    let mode = Modes.none;
+    let $unitTop = $("#mainContent > table.unit-top");
     //let $unitList = $("#mainContent > table.unit-list-2014");
-    var $unitList = $("table.unit-list-2014"); // на чужом window списке нет хедера с id
+    let $unitList = $("table.unit-list-2014"); // на чужом window списке нет хедера с id
     if (isMyUnitList())
         mode = Modes.self;
     if (isOthersUnitList())
@@ -690,10 +1011,10 @@ function run() {
         return;
     }
     // работа
-    var $rows = closestByTagName($unitList.find("td.unit_id"), "tr");
-    var units = parseUnits($rows, mode);
-    var townRegDict = makeRegTownDict(units); // словарь чтобы удобно было найти связь город страна
-    var inProcess = { Count: 0, Finally: function () { } }; // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
+    let $rows = closestByTagName($unitList.find("td.unit_id"), "tr");
+    let units = parseUnits($rows, mode);
+    let townRegDict = makeRegTownDict(units); // словарь чтобы удобно было найти связь город страна
+    let inProcess = { Count: 0, Finally: () => { } }; // счетчик запущенных запросов по эффективности. когда закончится выполняет Finally 
     if (mode === Modes.self) {
         // поиск эффективности и подсветка красным всего что не 100%
         efficiencyColor(units);
@@ -709,14 +1030,14 @@ function run() {
     // удаляем в строке с названиями, вторую строку о числе работников, и размере складов и так далее.
     //unitList.find("td.info").each(function () { $(this).children().not("a").remove(); });
     // создаем панельку, и шоутайм.
-    var $panel = buildFilterPanel();
+    let $panel = buildFilterPanel();
     if (mode === Modes.self)
         $panel.wrapAll("<tr><td colspan=3></td></tr>").closest("tr").insertAfter($unitTop.find("tr:last-child"));
     else
         $panel.wrapAll("<div></div>").closest("div").insertBefore($unitList);
     $panel.show();
     elapsed = (performance.now() - start) / 1000;
-    console.log("manager: " + $rows.length + " units parsed  in " + elapsed.toPrecision(3) + " sec.");
+    console.log(`manager: ${$rows.length} units parsed  in ${elapsed.toPrecision(3)} sec.`);
     // Функции
     //
     // формирует стиль для столбца с размером подразделения чтобы он меньше занимал места
@@ -733,21 +1054,21 @@ function run() {
     }
     // подсветка красным эффективности меньше 100
     function efficiencyColor(units) {
-        for (var i = 0; i < units.length; i++)
+        for (let i = 0; i < units.length; i++)
             if (units[i].Efficiency < 100)
                 units[i].$eff.css("color", 'red');
     }
     // сокращенный размер для размеров подразделений
     function resizeSizeColumn() {
-        var $sizeColumnHeader = $unitList.find("div.field_title").eq(3);
+        let $sizeColumnHeader = $unitList.find("div.field_title").eq(3);
         //console.log(sizeColumnHeader);
-        var newHeader = $sizeColumnHeader.html().replace("Размер", "Р.");
+        let newHeader = $sizeColumnHeader.html().replace("Размер", "Р.");
         $sizeColumnHeader.html(newHeader);
         $sizeColumnHeader.attr("title", "размер подраздления (от 1 до 6)");
     }
     // перемещает кнопку создания нового юнита чтобы она занимала меньше места
     function moveCreateBtn() {
-        var typeToolbar = $unitTop.find("td.u-l");
+        let typeToolbar = $unitTop.find("td.u-l");
         // бывает что нет панели с кнопками юнитов, тогда оставим все как есть
         if (typeToolbar.length === 0)
             return;
@@ -761,12 +1082,12 @@ function run() {
     }
     // делает фильтрацию
     function doFilter($panel) {
-        var op = getFilterOptions($panel, mode);
-        var filterMask = filter(units, op, mode);
-        var cnt = 0;
-        for (var i = 0; i < units.length; i++) {
-            var unit = units[i];
-            var $commentRow = unit.$row.next("tr.unit_comment");
+        let op = getFilterOptions($panel, mode);
+        let filterMask = filter(units, op, mode);
+        let cnt = 0;
+        for (let i = 0; i < units.length; i++) {
+            let unit = units[i];
+            let $commentRow = unit.$row.next("tr.unit_comment");
             if (filterMask[i]) {
                 cnt++;
                 unit.$row.show();
@@ -779,23 +1100,23 @@ function run() {
                     $commentRow.hide();
             }
         }
-        $panel.find("#rows").text("[" + cnt + "]");
+        $panel.find("#rows").text(`[${cnt}]`);
     }
     function buildFilterPanel() {
         function buildOptions(items) {
-            var optionsHtml = '<option value="all", label="all">all</option>';
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i];
-                var lbl = item.Count > 1 ? "label=\"" + item.Name + " (" + item.Count + ")\"" : "label=\"" + item.Name + "\"";
-                var val = "value=\"" + item.Value + "\"";
-                var txt = item.Name;
-                var html = "<option " + lbl + " " + val + ">" + txt + "</option>";
+            let optionsHtml = '<option value="all", label="all">all</option>';
+            for (let i = 0; i < items.length; i++) {
+                let item = items[i];
+                let lbl = item.Count > 1 ? `label="${item.Name} (${item.Count})"` : `label="${item.Name}"`;
+                let val = `value="${item.Value}"`;
+                let txt = item.Name;
+                let html = `<option ${lbl} ${val}>${txt}</option>`;
                 optionsHtml += html;
             }
             return optionsHtml;
         }
         // если панели еще нет, то добавить её
-        var style = {
+        let style = {
             padding: "2px",
             border: "1px solid #0184D0",
             "border-radius": "4px 4px 4px 4px",
@@ -805,74 +1126,87 @@ function run() {
             display: "none",
             width: "100%"
         };
-        var panelHtml = "\n            <div id='filterPanel' >\n                <table>\n                <tbody>\n                    <tr><td id=\"f_row1\"></td></tr>\n                    <tr><td id=\"f_row2\"></td></tr>\n                </tbody>\n                </table>\n            </div>";
-        var $panel = $(panelHtml);
+        let panelHtml = `
+            <div id='filterPanel' >
+                <table>
+                <tbody>
+                    <tr><td id="f_row1"></td></tr>
+                    <tr><td id="f_row2"></td></tr>
+                </tbody>
+                </table>
+            </div>`;
+        let $panel = $(panelHtml);
         $panel.css(style);
         // фильтр по регионам
-        var regionFilter = $("<select id='regionFilter' class='option' style='max-width:120px;'>");
-        var regions = makeKeyValCount(units, function (el) { return el.Region; });
+        let regionFilter = $("<select id='regionFilter' class='option' style='max-width:120px;'>");
+        let regions = makeKeyValCount(units, (el) => el.Region);
         regionFilter.append(buildOptions(regions));
         // фильтр по городам
-        var townFilter = $("<select id='townFilter' class='option' style='max-width:120px;'>");
-        var towns = makeKeyValCount(units, function (el) { return el.Town; });
+        let townFilter = $("<select id='townFilter' class='option' style='max-width:120px;'>");
+        let towns = makeKeyValCount(units, (el) => el.Town);
         townFilter.append(buildOptions(towns));
         // фильтр по типам
-        var typeFilter = $("<select id='typeFilter' class='option' style='max-width:120px;'>");
-        var types = makeKeyValCount(units, function (el) { return el.Type; });
+        let typeFilter = $("<select id='typeFilter' class='option' style='max-width:120px;'>");
+        let types = makeKeyValCount(units, (el) => el.Type);
         typeFilter.append(buildOptions(types));
         // фильтр по товарам
-        var goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:120px;'>");
+        let goodsFilter = $("<select id='goodsFilter' class='option' style='max-width:120px;'>");
         goodsFilter.append(buildOptions(getGoods(units)));
         // фильтр по проблемам
-        var problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:120px;'>");
+        let problemsFilter = $("<select id='problemsFilter' class='option' style='max-width:120px;'>");
         problemsFilter.append(buildOptions(getProblems(units)));
         // фильтр по эффективности
-        var efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
+        let efficiencyFilter = $("<select id='efficiencyFilter' class='option' style='max-width:50px;'>")
             .append('<option value=-1>all</option>')
             .append('<option value=100>100%</option>') // ТОЛЬКО 100%
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
+        // фильтр по тегм
+        let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
+        let taggedUnits = units.filter((val, i, arr) => val.Tag.length > 0);
+        let tags = makeKeyValCount(taggedUnits, (el) => el.Tag);
+        tagFilter.append(buildOptions(tags));
         // текстовый фильтр
-        var textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
+        let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
         // запрос сразу всех данных по эффективности
-        var effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
+        let effButton = $("<input type=button id=getEff value='GO'>").css("color", "red");
         // события смены фильтров
         //
         // делегируем все события на панель
         $panel.on("change", ".option", function (event) {
-            var $el = $(event.target);
+            let $el = $(event.target);
             // смена региона сбросит город
             if ($el.is(regionFilter))
                 townFilter.val("all");
             // смена города выставит регион в тот который надо для города
             if ($el.is(townFilter)) {
-                var twn = $el.val();
-                var reg = twn === "all" ? "all" : townRegDict[twn];
+                let twn = $el.val();
+                let reg = twn === "all" ? "all" : townRegDict[twn];
                 regionFilter.val(reg);
             }
             doFilter($panel);
         });
         $panel.on("dblclick", ".option", function (event) {
-            var $el = $(event.target);
+            let $el = $(event.target);
             if ($el.is("select")) {
                 $el.prop('selectedIndex', 0);
                 $el.change();
             }
         });
         effButton.click(function () {
-            var $btn = $(this);
+            let $btn = $(this);
             $btn.prop('disabled', true).css("color", "gray");
             // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
-            var filterMask = filter(units, getFilterOptions($panel, mode), mode);
-            filterMask.forEach(function (e, i, arr) { return e && inProcess.Count++; });
-            inProcess.Finally = function () {
+            let filterMask = filter(units, getFilterOptions($panel, mode), mode);
+            filterMask.forEach((e, i, arr) => e && inProcess.Count++);
+            inProcess.Finally = () => {
                 // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
-                inProcess = { Count: 0, Finally: function () { } };
+                inProcess = { Count: 0, Finally: () => { } };
                 $btn.prop('disabled', false).css("color", "red");
             };
             // заводим клики только для фильтранутых
-            console.log(inProcess.Count + " units started.");
-            units.forEach(function (e, i, arr) {
+            console.log(`${inProcess.Count} units started.`);
+            units.forEach((e, i, arr) => {
                 if (filterMask[i]) {
                     e.$eff.addClass("auto"); // класс говорит что эффективность будет автозапрошена
                     e.$eff.trigger("click");
@@ -881,8 +1215,8 @@ function run() {
         });
         // дополняем панель до конца элементами
         //
-        var $r1 = $panel.find("#f_row1");
-        var $r2 = $panel.find("#f_row2");
+        let $r1 = $panel.find("#f_row1");
+        let $r2 = $panel.find("#f_row2");
         $r1.append("<span>Рег: </span>").append(regionFilter);
         $r1.append("<span> Гор: </span>").append(townFilter);
         $r1.append("<span> Тип: </span>").append(typeFilter);
@@ -892,22 +1226,23 @@ function run() {
             $r1.append("<span> Эф: </span>").append(efficiencyFilter);
             $r1.append("<span> </span>").append(effButton);
         }
+        $r2.append("<span> Тэг#: </span>").append(tagFilter);
         $r2.append("<span> Rx: </span>").append(textFilter);
         $r2.append("<span id='rows' style='color: blue;'></span>");
         return $panel;
     }
     function efficiencyClick(units) {
-        var realm = getRealm();
-        for (var i = 0; i < units.length; i++)
+        let realm = getRealm();
+        for (let i = 0; i < units.length; i++)
             units[i].$eff.css("cursor", "pointer").prop("title", "Узнать прогноз эффективности");
         $unitList.on("click", "td.prod", function () {
-            var $td = $(this);
+            let $td = $(this);
             if ($td.hasClass("processing"))
                 return false;
-            var subid = numberfy($td.closest("tr").find("td.unit_id").text());
+            let subid = numberfy($td.closest("tr").find("td.unit_id").text());
             if (subid < 0)
                 throw new Error("subid not found for: " + $td);
-            var url = "/" + realm + "/window/unit/productivity_info/" + subid;
+            let url = `/${realm}/window/unit/productivity_info/${subid}`;
             $td.empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
             $td.addClass("processing");
             $.ajax({
@@ -918,11 +1253,11 @@ function run() {
                     if ($td.hasClass("auto") && inProcess.Count <= 0)
                         throw new Error("somehow we got 0 in process counter");
                     // парсим страничку с данными эффективности
-                    var $html = $(html);
-                    var percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
+                    let $html = $(html);
+                    let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
                     $td.html(percent + "<i>%</i>");
                     // выставляем значение в ячейку
-                    var color = (percent == '100.00' ? 'green' : 'red');
+                    let color = (percent == '100.00' ? 'green' : 'red');
                     $td.css('color', color);
                     $td.removeClass("processing");
                     // если запрос в авторежиме
@@ -936,7 +1271,7 @@ function run() {
                 error: function (xhr, status, error) {
                     //Resend ajax
                     var _this = this;
-                    setTimeout(function () { return $.ajax(_this); }, 3000);
+                    setTimeout(() => $.ajax(_this), 3000);
                 }
             });
             return false;
@@ -944,19 +1279,19 @@ function run() {
     }
 }
 function parseUnits($rows, mode) {
-    var units = [];
-    var parseImgs = function ($imgs) {
-        var res = [];
-        for (var m = 0; m < $imgs.length; m++)
+    let units = [];
+    let parseImgs = ($imgs) => {
+        let res = [];
+        for (let m = 0; m < $imgs.length; m++)
             res.push({
                 Name: $imgs.eq(m).attr("title").trim(),
                 Url: $imgs.eq(m).attr("src")
             });
         return res;
     };
-    var nameUrlToString = function (items) {
-        var str = " ";
-        for (var i = 0; i < items.length; i++)
+    let nameUrlToString = (items) => {
+        let str = " ";
+        for (let i = 0; i < items.length; i++)
             str += items[i].Name + " " + items[i].Url + " ";
         return str;
     };
@@ -964,45 +1299,49 @@ function parseUnits($rows, mode) {
     // через нахождение ячеек из рядов и затем допарсинг так же
     // если сразу искать $(td.unit_id) и потом допарсивать в цикле то так же как по рядам.
     // просто по рядам 17 сек на 10к строк. приемлемо
-    for (var i = 0; i < $rows.length; i++) {
-        var $r = $rows.eq(i);
-        var searchStr = "";
-        var id = numberfy($r.find("td.unit_id").text()); // внутри триммится
+    for (let i = 0; i < $rows.length; i++) {
+        let $r = $rows.eq(i);
+        let searchStr = "";
+        let id = numberfy($r.find("td.unit_id").text()); // внутри триммится
         searchStr += id;
-        var $geo = $r.find("td.geo");
-        var reg = $geo.attr("title").trim();
-        var twn = $geo.text().trim();
+        let $geo = $r.find("td.geo");
+        let reg = $geo.attr("title").trim();
+        let twn = $geo.text().trim();
         searchStr += " " + reg + " " + twn;
-        var $info = $r.find("td.info");
-        var $link = $info.find("a");
-        var name_1 = $link.text();
-        var url = $link.attr("href");
-        var type = $info.attr("title");
-        var category = $info.attr("class").split("-")[1];
-        searchStr += " " + name_1 + " " + url + " " + type + " " + category;
+        let $info = $r.find("td.info");
+        let $link = $info.find("a");
+        let name = $link.text();
+        let url = $link.attr("href");
+        let type = $info.attr("title");
+        let category = $info.attr("class").split("-")[1];
+        searchStr += " " + name + " " + url + " " + type + " " + category;
         //let goods = $r.find("td.spec").find("img").map(parseImg).get() as any as INameUrl[];
-        var $tdSpec = $r.find("td.spec");
-        var $goods = $tdSpec.find("img");
-        var goods = parseImgs($goods);
+        let $tdSpec = $r.find("td.spec");
+        let $goods = $tdSpec.find("img");
+        let goods = parseImgs($goods);
         searchStr += " " + nameUrlToString(goods) + " " + $tdSpec.attr("title");
         // на чужой странице нет проблем и эффективностей
-        var problems = [];
-        var $eff = $("<br/>");
-        var eff = -1;
+        let problems = [];
+        let $eff = $("<br/>");
+        let eff = -1;
         if (mode === Modes.self) {
-            var $problems = $r.find("td.alerts").find("img");
+            let $problems = $r.find("td.alerts").find("img");
             problems = parseImgs($problems);
             searchStr += " " + nameUrlToString(problems);
             $eff = $r.find("td.prod");
             eff = numberfy($eff.clone().children().remove().end().text());
             searchStr += " " + eff;
         }
+        // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
+        // спарсим тег, либо "" если его нет
+        let tg = tag(name);
         units.push({
             $row: $r,
             Id: id,
             Region: reg,
             Town: twn,
-            Name: name_1,
+            Name: name,
+            Tag: tg,
             Url: url,
             Type: type,
             Goods: goods,
@@ -1014,12 +1353,18 @@ function parseUnits($rows, mode) {
     }
     return units;
 }
+// выделяет из строки так вида tag#чтотоеще. Если такого нет возвращает ""
+function tag(str) {
+    let rx = /^([a-z,0-9]+)#.+/i;
+    let items = rx.exec(str);
+    return items ? items[1] : "";
+}
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
 function filter(units, options, mode) {
-    var res = [];
-    var textRx = new RegExp(options.TextRx, "i");
-    for (var i = 0; i < units.length; i++) {
-        var unit = units[i];
+    let res = [];
+    let textRx = new RegExp(options.TextRx, "i");
+    for (let i = 0; i < units.length; i++) {
+        let unit = units[i];
         res[i] = false;
         if (options.Region != "all" && unit.Region != options.Region)
             continue;
@@ -1027,12 +1372,14 @@ function filter(units, options, mode) {
             continue;
         if (options.Type != "all" && unit.Type != options.Type)
             continue;
+        if (options.Tag != "all" && unit.Tag != options.Tag)
+            continue;
         if (textRx.test(unit.SearchString) === false)
             continue;
-        if (options.GoodUrl != "all" && !unit.Goods.some(function (e) { return e.Url === options.GoodUrl; }))
+        if (options.GoodUrl != "all" && !unit.Goods.some((e) => e.Url === options.GoodUrl))
             continue;
         if (mode === Modes.self) {
-            if (options.ProblemUrl != "all" && !unit.Problems.some(function (e) { return e.Url === options.ProblemUrl; }))
+            if (options.ProblemUrl != "all" && !unit.Problems.some((e) => e.Url === options.ProblemUrl))
                 continue;
             switch (options.Efficiency) {
                 case 100:
@@ -1060,6 +1407,7 @@ function getFilterOptions($panel, mode) {
         Region: $panel.find("#regionFilter").val(),
         Town: $panel.find("#townFilter").val(),
         Type: $panel.find("#typeFilter").val(),
+        Tag: $panel.find("#tagFilter").val(),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
         GoodUrl: $panel.find("#goodsFilter").val(),
         ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
@@ -1067,29 +1415,29 @@ function getFilterOptions($panel, mode) {
     };
 }
 function getGoods(units) {
-    var goods = [];
-    for (var i = 0; i < units.length; i++)
+    let goods = [];
+    for (let i = 0; i < units.length; i++)
         goods.push.apply(goods, units[i].Goods);
-    return makeKeyValCount(goods, function (el) { return el.Name; }, function (el) { return el.Url; });
+    return makeKeyValCount(goods, (el) => el.Name, (el) => el.Url);
 }
 function getProblems(units) {
-    var problems = [];
-    for (var i = 0; i < units.length; i++)
+    let problems = [];
+    for (let i = 0; i < units.length; i++)
         problems.push.apply(problems, units[i].Problems);
-    return makeKeyValCount(problems, function (el) { return el.Name; }, function (el) { return el.Url; });
+    return makeKeyValCount(problems, (el) => el.Name, (el) => el.Url);
 }
 function makeKeyValCount(items, keySelector, valueSelector) {
-    var res = {};
-    for (var i = 0; i < items.length; i++) {
-        var key = keySelector(items[i]);
-        var val = valueSelector ? valueSelector(items[i]) : key;
+    let res = {};
+    for (let i = 0; i < items.length; i++) {
+        let key = keySelector(items[i]);
+        let val = valueSelector ? valueSelector(items[i]) : key;
         if (res[key] != null)
             res[key].Count++;
         else
             res[key] = { Name: key, Value: val, Count: 1 };
     }
-    var resArray = [];
-    for (var key in res)
+    let resArray = [];
+    for (let key in res)
         resArray.push(res[key]);
     resArray.sort(function (a, b) {
         if (a.Name > b.Name)
@@ -1101,9 +1449,9 @@ function makeKeyValCount(items, keySelector, valueSelector) {
     return resArray;
 }
 function makeRegTownDict(units) {
-    var res = {};
-    for (var i = 0; i < units.length; i++) {
-        var town = units[i].Town;
+    let res = {};
+    for (let i = 0; i < units.length; i++) {
+        let town = units[i].Town;
         if (res[town] != null)
             if (res[town] !== units[i].Region)
                 throw new Error("что то пошло не так. У одного города разные регионы у юнитов.");
@@ -1111,5 +1459,5 @@ function makeRegTownDict(units) {
     }
     return res;
 }
-$(document).ready(function () { return run(); });
+$(document).ready(() => run());
 //# sourceMappingURL=management.user.js.map
