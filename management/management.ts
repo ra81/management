@@ -308,28 +308,24 @@ function run() {
             }
         });
 
-        effButton.click(function (this: Element) {
+        effButton.click(async function (this: Element) {
             let $btn = $(this);
             
             $btn.prop('disabled', true).css("color", "gray");
 
-            // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
+            // берем только видимые строки
             let filterMask = filter(units, getFilterOptions($panel, mode), mode);
-            filterMask.forEach((e, i, arr) =>  e && inProcess.Count++);
-            inProcess.Finally = () => {
-                // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
-                inProcess = { Count: 0, Finally: () => { } };
-                $btn.prop('disabled', false).css("color", "red");
-            };
+            let rows = units
+                .filter((val, i) => filterMask[i])
+                .map(val => val.$row);
 
-            // заводим клики только для фильтранутых
-            console.log(`${inProcess.Count} units started.`);
-            units.forEach((e, i, arr) => {
-                if (filterMask[i]) {
-                    e.$eff.addClass("auto");    // класс говорит что эффективность будет автозапрошена
-                    e.$eff.trigger("click");
-                }
-            });
+            // формируем общий объект
+            let $rows = $();
+            for (let r of rows)
+                $rows= $rows.add(r);
+
+            await updateEff_async($rows);
+            $btn.prop('disabled', false).css("color", "red");
         });
 
         // дополняем панель до конца элементами
@@ -355,64 +351,97 @@ function run() {
 
     function efficiencyClick(units: IUnit[]) {
 
-        let realm = getRealm();
-
         for (let i = 0; i < units.length; i++)
             units[i].$eff.css("cursor", "pointer").prop("title", "Узнать прогноз эффективности");
 
         $unitList.on("click", "td.prod", function (this: Element) {
             let $td = $(this);
-
-            if ($td.hasClass("processing"))
-                return false;
-
-            let subid = numberfy($td.closest("tr").find("td.unit_id").text());
-            if (subid < 0)
-                throw new Error("subid not found for: " + $td);
-
-            let url = `/${realm}/window/unit/productivity_info/${subid}`;
-
-            $td.empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
-            $td.addClass("processing");
-            $.ajax({
-                url: url,
-                type: "GET",
-
-                success: function (html, status, xhr) {
-
-                    // если запрос в авторежиме
-                    if ($td.hasClass("auto") && inProcess.Count <= 0)
-                        throw new Error("somehow we got 0 in process counter");
-
-                    // парсим страничку с данными эффективности
-                    let $html = $(html);
-                    let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
-                    $td.html(percent + "<i>%</i>");
-
-                    // выставляем значение в ячейку
-                    let color = (percent == '100.00' ? 'green' : 'red');
-                    $td.css('color', color);
-                    $td.removeClass("processing");
-
-                    // если запрос в авторежиме
-                    if ($td.hasClass("auto")) {
-                        $td.removeClass("auto");
-
-                        inProcess.Count--;
-                        if (inProcess.Count === 0)
-                            inProcess.Finally();
-                    }
-                },
-                error: function (this: any, xhr: any, status: any, error: any) {
-                    //Resend ajax
-                    var _this = this;
-                    setTimeout(() => $.ajax(_this), 3000);
-                }
-            });	
-
-            return false;
+            updateEff_async($td.closest("tr"));
         });
     }
+}
+
+async function updateEff_async($rows: JQuery) {
+
+    let subids: number[] = [];
+
+    // ставис статус что в обработке и картинку загрузки данных
+    // так же собираем subid, НО только те которые сейчас не запрашиваются еще. избегаем двойного запроса
+    $rows.each((i, el) => {
+        let $r = $(el);
+        if ($r.hasClass("processing"))
+            return;
+
+        let subid = numberfyOrError(oneOrError($r, "td.unit_id").text());
+        subids.push(subid);
+
+        oneOrError($r, "td.prod").empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
+        $r.attr("data-subid", subid);
+        $r.addClass("processing");
+    });
+
+    // запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
+    await getEff_async(subids, (dict) => {
+        for (let key in dict) {
+            let subid = parseInt(key);
+            let percent = dict[subid];
+
+            let $r = $rows.filter(`tr[data-subid=${subid}]`);
+            if ($r.length != 1)
+                throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+
+            // выставляем значение в ячейку
+            let color = (percent >= 100 ? 'green' : 'red');
+            oneOrError($r, "td.prod")
+                .html(percent.toFixed(2) + "<i>%</i>")
+                .css('color', color);
+
+            // зачищаем ненужные данные со строки
+            $r.removeAttr("data-subid");
+            $r.removeClass("processing");
+        }
+    });
+}
+
+/**
+ * Запрашивает эффективность для заданного списка. Если много элементов то будет порционно выдавать результаты
+   через коллбэк
+ * @param subids
+ * @param onPartDone
+ */
+async function getEff_async(subids: number[], onPartDone: IAction1<IDictionaryN<number>>) {
+    if (subids == null)
+        throw new Error(`subids == null`);
+
+    console.log("запрашиваю для ", subids);
+
+    let realm = getRealmOrError();
+    const psize = 5;
+    let i = 0;
+    let part: number[] = [];
+    do {
+        // берем порцию. если вылезем за край массива то будет пустой срез
+        part = subids.slice(i, i + psize);
+        i += psize;
+
+        // запрашиваем для нее данные
+        let waitList: Promise<any>[] = [];
+        for (let n = 0; n < part.length; n++) {
+            let promise = tryGet_async(`/${realm}/window/unit/productivity_info/${part[n]}`);
+            waitList.push(promise);
+        }
+        let htmlList = await Promise.all(waitList);
+
+        // обработка и вытаскивание эффективности
+        let res: IDictionaryN<number> = {};
+        for (let n = 0; n < part.length; n++) {
+            let percent = $(htmlList[n]).find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
+            res[part[n]] = numberfyOrError(percent, -1);
+        }
+
+        onPartDone(res);
+
+    } while (part.length > 0);
 }
 
 function parseUnits($rows: JQuery, mode: Modes): IUnit[] {

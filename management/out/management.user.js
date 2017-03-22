@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.80
+// @version 	   1.81
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -47,15 +47,16 @@ var UnitTypes;
     UnitTypes[UnitTypes["power"] = 22] = "power";
     UnitTypes[UnitTypes["coal_power"] = 23] = "coal_power";
     UnitTypes[UnitTypes["incinerator_power"] = 24] = "incinerator_power";
-    UnitTypes[UnitTypes["fuel"] = 25] = "fuel";
-    UnitTypes[UnitTypes["repair"] = 26] = "repair";
-    UnitTypes[UnitTypes["apiary"] = 27] = "apiary";
-    UnitTypes[UnitTypes["educational"] = 28] = "educational";
-    UnitTypes[UnitTypes["kindergarten"] = 29] = "kindergarten";
-    UnitTypes[UnitTypes["sun_power"] = 30] = "sun_power";
-    UnitTypes[UnitTypes["network"] = 31] = "network";
-    UnitTypes[UnitTypes["it"] = 32] = "it";
-    UnitTypes[UnitTypes["cellular"] = 33] = "cellular";
+    UnitTypes[UnitTypes["oil_power"] = 25] = "oil_power";
+    UnitTypes[UnitTypes["fuel"] = 26] = "fuel";
+    UnitTypes[UnitTypes["repair"] = 27] = "repair";
+    UnitTypes[UnitTypes["apiary"] = 28] = "apiary";
+    UnitTypes[UnitTypes["educational"] = 29] = "educational";
+    UnitTypes[UnitTypes["kindergarten"] = 30] = "kindergarten";
+    UnitTypes[UnitTypes["sun_power"] = 31] = "sun_power";
+    UnitTypes[UnitTypes["network"] = 32] = "network";
+    UnitTypes[UnitTypes["it"] = 33] = "it";
+    UnitTypes[UnitTypes["cellular"] = 34] = "cellular";
 })(UnitTypes || (UnitTypes = {}));
 // уровни сервиса
 var ServiceLevels;
@@ -185,6 +186,51 @@ function intersect(a, b) {
     }
     // если надо удалить дубли, удаляем
     return unique(intersect);
+}
+// NUMBER ------------------------------------------
+/**
+ * round до заданного числа знаков. Может дать погрешность на округлении но похрен
+ * @param n
+ * @param decimals
+ */
+function roundTo(n, decimals) {
+    if (isNaN(n) || isNaN(decimals))
+        throw new Error(`числа должны быть заданы. n:${n}, decimals:${decimals}`);
+    if (decimals < 0)
+        throw new Error(`decimals: ${decimals} не может быть меньше 0`);
+    decimals = Math.round(decimals); // делаем ставку на косяки округления откуда может прилететь 1.00000001
+    let f = Math.pow(10, decimals);
+    return Math.round(n * f) / f;
+}
+/**
+ * floor до заданного числа знаков. Может дать погрешность если будет число вида x.99999999999
+   так как при расчетах прибавляет 1е-10. Но это очень редкий случай когда округлит вверх
+ * @param n
+ * @param decimals
+ */
+function floorTo(n, decimals) {
+    if (isNaN(n) || isNaN(decimals))
+        throw new Error(`числа должны быть заданы. n:${n}, decimals:${decimals}`);
+    if (decimals < 0)
+        throw new Error(`decimals: ${decimals} не может быть меньше 0`);
+    decimals = Math.round(decimals); // делаем ставку на косяки округления откуда может прилететь 1.00000001
+    let f = Math.pow(10, decimals);
+    return Math.floor(n * f + 1e-10) / f;
+}
+/**
+ * ceil до заданного числа знаков. Может дать погрешность если будет число вида x.00000000000001
+   так как при расчетах вычитает 1е-10. Но это очень редкий случай когда округлит вверх
+ * @param n
+ * @param decimals
+ */
+function ceilTo(n, decimals) {
+    if (isNaN(n) || isNaN(decimals))
+        throw new Error(`числа должны быть заданы. n:${n}, decimals:${decimals}`);
+    if (decimals < 0)
+        throw new Error(`decimals: ${decimals} не может быть меньше 0`);
+    decimals = Math.round(decimals); // делаем ставку на косяки округления откуда может прилететь 1.00000001
+    let f = Math.pow(10, decimals);
+    return Math.ceil(n * f - 1e-10) / f;
 }
 // PARSE -------------------------------------------
 /**
@@ -406,11 +452,12 @@ function sayNumber(num) {
     return s1;
 }
 /**
- * Для денег подставляет нужный символ при выводе на экран
+ * Для денег подставляет нужный символ при выводе на экран. Округляет до 2 знаков,
+   так же вставляет пробелы как разделитель для тысяч
  * @param num
  * @param symbol
  */
-function sayMoney(num, symbol) {
+function sayMoney(num, symbol = "$") {
     let result = sayNumber(num);
     if (symbol != null) {
         if (num < 0)
@@ -462,9 +509,10 @@ let url_unit_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+/i; // внутри
 let url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // главная юнита
 let url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
 let url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
-let url_price_history_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+\/product_history\/\d+\/?$/i; // история продаж в магазине по товару
+let url_price_history_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+\/product_history\/\d+\/?/i; // история продаж в магазине по товару
 let url_supp_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/supply\/?/i; // снабжение
 let url_sale_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/sale/i; // продажа склад/завод
+let url_ads_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/virtasement$/i; // реклама
 let url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
 let url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
 // для компании
@@ -478,6 +526,7 @@ let url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee
 // 
 let url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
 let url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
+let url_city_retail_report_rx = /\/[a-z]+\/(?:main|window)\/globalreport\/marketing\/by_trade_at_cities\/\d+/i; // розничный отчет по конкретному товару
 /**
  * По заданной ссылке и хтмл определяет находимся ли мы внутри юнита или нет.
  * Если на задавать ссылку и хтмл то берет текущий документ.
@@ -869,15 +918,71 @@ function tryPost_async(url, form, retries = 10, timeout = 1000, beforePost, onEr
         return $deferred.promise();
     });
 }
+/**
+ * Отправляет данные на сервер запросом POST. В остальном работает как и гет. Так же вернет промис который ресолвит с возвращенными данными
+ * @param url
+ * @param data данные для отправки на сервер
+ * @param retries
+ * @param timeout
+ * @param beforePost
+ */
+function tryPostJSON_async(url, data, retries = 10, timeout = 1000, beforePost, onError) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // сам метод пришлось делать Promise<any> потому что string | Error не работало какого то хуя не знаю. Из за стрик нулл чек
+        let $deferred = $.Deferred();
+        if (beforePost) {
+            try {
+                beforePost(url);
+            }
+            catch (err) {
+                logDebug("beforePost вызвал исключение", err);
+            }
+        }
+        $.ajax({
+            url: url,
+            data: data,
+            type: "POST",
+            dataType: 'JSON',
+            success: (data, status, jqXHR) => $deferred.resolve(data),
+            error: function (jqXHR, textStatus, errorThrown) {
+                if (onError) {
+                    try {
+                        onError(url);
+                    }
+                    catch (err) {
+                        logDebug("onError вызвал исключение", err);
+                    }
+                }
+                retries--;
+                if (retries <= 0) {
+                    let err = new Error(`can't post ${this.url}\nstatus: ${jqXHR.status}\ntextStatus: ${jqXHR.statusText}\nerror: ${errorThrown}`);
+                    $deferred.reject(err);
+                    return;
+                }
+                //logDebug(`ошибка запроса ${this.url} осталось ${retries} попыток`);
+                let _this = this;
+                setTimeout(() => {
+                    if (beforePost) {
+                        try {
+                            beforePost(url);
+                        }
+                        catch (err) {
+                            logDebug("beforePost вызвал исключение", err);
+                        }
+                    }
+                    $.ajax(_this);
+                }, timeout);
+            }
+        });
+        return $deferred.promise();
+    });
+}
 // COMMON ----------------------------------------
 let $xioDebug = false;
 function logDebug(msg, ...args) {
     if (!$xioDebug)
         return;
-    if (args.length === 0)
-        console.log(msg);
-    else
-        console.log(msg, args);
+    console.log(msg, ...args);
 }
 /**
  * определяет есть ли на странице несколько страниц которые нужно перелистывать или все влазит на одну
@@ -937,7 +1042,11 @@ function buildStoreKey(realm, code, subid) {
 function Export($place, test) {
     if ($place.length <= 0)
         return false;
-    let $txt = $('<textarea style="width: 800px; height: 200px"></textarea>');
+    if ($place.find("#txtExport").length > 0) {
+        $place.find("#txtExport").remove();
+        return;
+    }
+    let $txt = $('<textarea id="txtExport" style="display:block;width: 800px; height: 200px"></textarea>');
     let string = "";
     for (let key in localStorage) {
         if (!test(key))
@@ -947,7 +1056,7 @@ function Export($place, test) {
         string += `${key}=${localStorage[key]}`;
     }
     $txt.text(string);
-    $place.append("<br>").append($txt);
+    $place.append($txt);
     return true;
 }
 /**
@@ -959,30 +1068,41 @@ function Export($place, test) {
 function Import($place) {
     if ($place.length <= 0)
         return false;
-    let $txt = $('<textarea style="width: 800px; height: 200px"></textarea>');
-    let $saveBtn = $(`<input type=button disabled="true" value="Save!">`);
+    if ($place.find("#txtImport").length > 0) {
+        $place.find("#txtImport").remove();
+        $place.find("#saveImport").remove();
+        return;
+    }
+    let $txt = $('<textarea id="txtImport" style="display:block;width: 800px; height: 200px"></textarea>');
+    let $saveBtn = $(`<input id="saveImport" type=button disabled="true" value="Save!">`);
     $txt.on("input propertychange", (event) => $saveBtn.prop("disabled", false));
     $saveBtn.on("click", (event) => {
         let items = $txt.val().split("|"); // элементы вида Ключ=значение
         logDebug(`загружено ${items.length} элементов`);
-        items.forEach((val, i, arr) => {
-            let item = val.trim();
-            if (item.length <= 0)
-                throw new Error(`получили пустую строку для элемента ${i}, невозможно импортировать.`);
-            let kvp = item.split("="); // пара ключ значение
-            if (kvp.length !== 2)
-                throw new Error("Должен быть только ключ и значение а по факту не так. " + item);
-            let storeKey = kvp[0].trim();
-            let storeVal = kvp[1].trim();
-            if (storeKey.length <= 0 || storeVal.length <= 0)
-                throw new Error("Длина ключа или данных равна 0 " + item);
-            if (localStorage[storeKey])
-                logDebug(`Ключ ${storeKey} существует. Перезаписываем.`);
-            localStorage[storeKey] = storeVal;
-        });
-        logDebug("импорт завершен");
+        try {
+            items.forEach((val, i, arr) => {
+                let item = val.trim();
+                if (item.length <= 0)
+                    throw new Error(`получили пустую строку для элемента ${i}, невозможно импортировать.`);
+                let kvp = item.split("="); // пара ключ значение
+                if (kvp.length !== 2)
+                    throw new Error("Должен быть только ключ и значение а по факту не так. " + item);
+                let storeKey = kvp[0].trim();
+                let storeVal = kvp[1].trim();
+                if (storeKey.length <= 0 || storeVal.length <= 0)
+                    throw new Error("Длина ключа или данных равна 0 " + item);
+                if (localStorage[storeKey])
+                    logDebug(`Ключ ${storeKey} существует. Перезаписываем.`);
+                localStorage[storeKey] = storeVal;
+            });
+            alert("импорт завершен");
+        }
+        catch (err) {
+            let msg = err.message;
+            alert(msg);
+        }
     });
-    $place.append("<br>").append($txt).append("<br>").append($saveBtn);
+    $place.append($txt).append($saveBtn);
     return true;
 }
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
@@ -1210,23 +1330,20 @@ function run() {
             }
         });
         effButton.click(function () {
-            let $btn = $(this);
-            $btn.prop('disabled', true).css("color", "gray");
-            // запросим чисто  фильтранутые ячейки и тупо найдем их число. взводим счетчики и финальную операцию
-            let filterMask = filter(units, getFilterOptions($panel, mode), mode);
-            filterMask.forEach((e, i, arr) => e && inProcess.Count++);
-            inProcess.Finally = () => {
-                // сотрем финальное действо выставим счетчик в инишиал вэлью. включим кнопку
-                inProcess = { Count: 0, Finally: () => { } };
+            return __awaiter(this, void 0, void 0, function* () {
+                let $btn = $(this);
+                $btn.prop('disabled', true).css("color", "gray");
+                // берем только видимые строки
+                let filterMask = filter(units, getFilterOptions($panel, mode), mode);
+                let rows = units
+                    .filter((val, i) => filterMask[i])
+                    .map(val => val.$row);
+                // формируем общий объект
+                let $rows = $();
+                for (let r of rows)
+                    $rows = $rows.add(r);
+                yield updateEff_async($rows);
                 $btn.prop('disabled', false).css("color", "red");
-            };
-            // заводим клики только для фильтранутых
-            console.log(`${inProcess.Count} units started.`);
-            units.forEach((e, i, arr) => {
-                if (filterMask[i]) {
-                    e.$eff.addClass("auto"); // класс говорит что эффективность будет автозапрошена
-                    e.$eff.trigger("click");
-                }
             });
         });
         // дополняем панель до конца элементами
@@ -1248,51 +1365,84 @@ function run() {
         return $panel;
     }
     function efficiencyClick(units) {
-        let realm = getRealm();
         for (let i = 0; i < units.length; i++)
             units[i].$eff.css("cursor", "pointer").prop("title", "Узнать прогноз эффективности");
         $unitList.on("click", "td.prod", function () {
             let $td = $(this);
-            if ($td.hasClass("processing"))
-                return false;
-            let subid = numberfy($td.closest("tr").find("td.unit_id").text());
-            if (subid < 0)
-                throw new Error("subid not found for: " + $td);
-            let url = `/${realm}/window/unit/productivity_info/${subid}`;
-            $td.empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
-            $td.addClass("processing");
-            $.ajax({
-                url: url,
-                type: "GET",
-                success: function (html, status, xhr) {
-                    // если запрос в авторежиме
-                    if ($td.hasClass("auto") && inProcess.Count <= 0)
-                        throw new Error("somehow we got 0 in process counter");
-                    // парсим страничку с данными эффективности
-                    let $html = $(html);
-                    let percent = $html.find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
-                    $td.html(percent + "<i>%</i>");
-                    // выставляем значение в ячейку
-                    let color = (percent == '100.00' ? 'green' : 'red');
-                    $td.css('color', color);
-                    $td.removeClass("processing");
-                    // если запрос в авторежиме
-                    if ($td.hasClass("auto")) {
-                        $td.removeClass("auto");
-                        inProcess.Count--;
-                        if (inProcess.Count === 0)
-                            inProcess.Finally();
-                    }
-                },
-                error: function (xhr, status, error) {
-                    //Resend ajax
-                    var _this = this;
-                    setTimeout(() => $.ajax(_this), 3000);
-                }
-            });
-            return false;
+            updateEff_async($td.closest("tr"));
         });
     }
+}
+function updateEff_async($rows) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let subids = [];
+        // ставис статус что в обработке и картинку загрузки данных
+        // так же собираем subid, НО только те которые сейчас не запрашиваются еще. избегаем двойного запроса
+        $rows.each((i, el) => {
+            let $r = $(el);
+            if ($r.hasClass("processing"))
+                return;
+            let subid = numberfyOrError(oneOrError($r, "td.unit_id").text());
+            subids.push(subid);
+            oneOrError($r, "td.prod").empty().append($("<img>").attr({ src: "https://raw.githubusercontent.com/ra81/management/master/loader.gif", height: 16, width: 16 }).css('padding-right', '20px'));
+            $r.attr("data-subid", subid);
+            $r.addClass("processing");
+        });
+        // запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
+        yield getEff_async(subids, (dict) => {
+            for (let key in dict) {
+                let subid = parseInt(key);
+                let percent = dict[subid];
+                let $r = $rows.filter(`tr[data-subid=${subid}]`);
+                if ($r.length != 1)
+                    throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+                // выставляем значение в ячейку
+                let color = (percent >= 100 ? 'green' : 'red');
+                oneOrError($r, "td.prod")
+                    .html(percent.toFixed(2) + "<i>%</i>")
+                    .css('color', color);
+                // зачищаем ненужные данные со строки
+                $r.removeAttr("data-subid");
+                $r.removeClass("processing");
+            }
+        });
+    });
+}
+/**
+ * Запрашивает эффективность для заданного списка. Если много элементов то будет порционно выдавать результаты
+   через коллбэк
+ * @param subids
+ * @param onPartDone
+ */
+function getEff_async(subids, onPartDone) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (subids == null)
+            throw new Error(`subids == null`);
+        console.log("запрашиваю для ", subids);
+        let realm = getRealmOrError();
+        const psize = 5;
+        let i = 0;
+        let part = [];
+        do {
+            // берем порцию. если вылезем за край массива то будет пустой срез
+            part = subids.slice(i, i + psize);
+            i += psize;
+            // запрашиваем для нее данные
+            let waitList = [];
+            for (let n = 0; n < part.length; n++) {
+                let promise = tryGet_async(`/${realm}/window/unit/productivity_info/${part[n]}`);
+                waitList.push(promise);
+            }
+            let htmlList = yield Promise.all(waitList);
+            // обработка и вытаскивание эффективности
+            let res = {};
+            for (let n = 0; n < part.length; n++) {
+                let percent = $(htmlList[n]).find('td:contains("Эффективность работы") + td td:eq(1)').text().replace('%', '').trim();
+                res[part[n]] = numberfyOrError(percent, -1);
+            }
+            onPartDone(res);
+        } while (part.length > 0);
+    });
 }
 function parseUnits($rows, mode) {
     let units = [];
