@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.81
+// @version 	   1.82
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -70,6 +70,19 @@ var ServiceLevels;
     ServiceLevels[ServiceLevels["elite"] = 5] = "elite";
 })(ServiceLevels || (ServiceLevels = {}));
 /**
+ * Простенький конвертер, который из множества формирует массив значений множества. По факту массив чисел.
+   используется внутреннее представление множеств и как бы может сломаться в будущем
+ * @param enumType тип множества
+ */
+function enum2Arr(enumType) {
+    let res = [];
+    for (let key in enumType) {
+        if (typeof enumType[key] === "number")
+            res.push(enumType[key]);
+    }
+    return res;
+}
+/**
  * Простой счетчик. Увеличивается на 1 при каждом вызове метода Next. Нужен для подсчета числа запросов
  */
 class Counter {
@@ -118,6 +131,37 @@ function filterDictVal(dict, selector) {
         let item = dict[key];
         if (selector(item))
             res[key] = item;
+    }
+    return res;
+}
+/**
+ * Склеивает два словаря вместе. Ключи не теряются, если есть одинаковые то вывалит ошибку
+ * @param dict1
+ * @param dict2
+ */
+function mergeDict(dict1, dict2) {
+    if (dict1 == null || dict2 == null)
+        throw new Error("аргументы не должны быть null");
+    let res = {};
+    for (let key in dict1)
+        res[key] = dict1[key];
+    for (let key in dict2) {
+        if (res[key] != null)
+            throw new Error(`dict1 уже имеет такой же ключ '${key}' как и dict2`);
+        res[key] = dict2[key];
+    }
+    return res;
+}
+function mergeDictN(dict1, dict2) {
+    if (dict1 == null || dict2 == null)
+        throw new Error("аргументы не должны быть null");
+    let res = {};
+    for (let key in dict1)
+        res[key] = dict1[key];
+    for (let key in dict2) {
+        if (res[key] != null)
+            throw new Error(`dict1 уже имеет такой же ключ '${key}' как и dict2`);
+        res[key] = dict2[key];
     }
     return res;
 }
@@ -418,7 +462,7 @@ function dateFromShort(str) {
  */
 function sayNumber(num) {
     if (num < 0)
-        return "-" + sayMoney(-num);
+        return "-" + sayNumber(-num);
     if (Math.round(num * 100) / 100 - Math.round(num))
         num = Math.round(num * 100) / 100;
     else
@@ -510,10 +554,11 @@ let url_unit_main_rx = /\/\w+\/(?:main|window)\/unit\/view\/\d+\/?$/i; // гла
 let url_unit_finance_report = /\/[a-z]+\/main\/unit\/view\/\d+\/finans_report(\/graphical)?$/i; // финанс отчет
 let url_trade_hall_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/trading_hall\/?/i; // торговый зал
 let url_price_history_rx = /\/[a-z]+\/(?:main|window)\/unit\/view\/\d+\/product_history\/\d+\/?/i; // история продаж в магазине по товару
-let url_supp_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/supply\/?/i; // снабжение
-let url_sale_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/sale/i; // продажа склад/завод
+let url_supply_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/supply\/?/i; // снабжение
+let url_sale_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/sale\/?/i; // продажа склад/завод
 let url_ads_rx = /\/[a-z]+\/main\/unit\/view\/\d+\/virtasement$/i; // реклама
-let url_supply_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
+let url_education_rx = /\/[a-z]+\/window\/unit\/employees\/education\/\d+\/?/i; // обучение
+let url_supply_create_rx = /\/[a-z]+\/unit\/supply\/create\/\d+\/step2\/?$/i; // заказ товара в маг, или склад. в общем стандартный заказ товара
 let url_equipment_rx = /\/[a-z]+\/window\/unit\/equipment\/\d+\/?$/i; // заказ оборудования на завод, лабу или куда то еще
 // для компании
 // 
@@ -527,6 +572,9 @@ let url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee
 let url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
 let url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
 let url_city_retail_report_rx = /\/[a-z]+\/(?:main|window)\/globalreport\/marketing\/by_trade_at_cities\/\d+/i; // розничный отчет по конкретному товару
+let url_products_size_rx = /\/[a-z]+\/main\/industry\/unit_type\/info\/2011\/volume\/?/i; // размеры продуктов на склада
+let url_country_duties_rx = /\/[a-z]+\/main\/geo\/countrydutylist\/\d+\/?/i; // таможенные пошлины и ИЦ
+let url_tm_info_rx = /\/[a-z]+\/main\/globalreport\/tm\/info/i; // брендовые товары список
 /**
  * По заданной ссылке и хтмл определяет находимся ли мы внутри юнита или нет.
  * Если на задавать ссылку и хтмл то берет текущий документ.
@@ -628,6 +676,13 @@ function isShop(html, my = true) {
     let $img = $html.find("#unitImage img[src*='/shop_']");
     if ($img.length > 1)
         throw new Error(`Найдено несколько (${$img.length}) картинок Магазина.`);
+    return $img.length > 0;
+}
+function isWarehouse($html) {
+    // нет разницы наш или чужой юнит везде картинка мага нужна. ее нет только если window
+    let $img = $html.find("#unitImage img[src*='/warehouse_']");
+    if ($img.length > 1)
+        throw new Error(`Найдено несколько (${$img.length}) картинок Склада.`);
     return $img.length > 0;
 }
 /**
@@ -813,6 +868,7 @@ function tryGet(url, retries = 10, timeout = 1000) {
  */
 function tryGet_async(url, retries = 10, timeout = 1000, beforeGet, onError) {
     return __awaiter(this, void 0, void 0, function* () {
+        logDebug(`tryGet_async: ${url}`);
         // сам метод пришлось делать Promise<any> потому что string | Error не работало какого то хуя не знаю. Из за стрик нулл чек
         let $deffered = $.Deferred();
         if (beforeGet) {
@@ -1035,6 +1091,26 @@ function buildStoreKey(realm, code, subid) {
     return res;
 }
 /**
+ * Возвращает все ключи юнитов для заданного реалма и КОДА.
+ * @param realm
+ * @param storeKey код ключа sh, udd, vh итд
+ */
+function getStoredUnitsKeys(realm, storeKey) {
+    let res = [];
+    for (let key in localStorage) {
+        // если в ключе нет числа, не брать его
+        let m = extractIntPositive(key);
+        if (m == null)
+            continue;
+        // если ключик не совпадает со старым ключем для посетителей
+        let subid = m[0];
+        if (key !== buildStoreKey(realm, storeKey, subid))
+            continue;
+        res.push(key);
+    }
+    return res;
+}
+/**
  * Выводит текстовое поле, куда выводит все ключи с содержимым в формате ключ=значение|ключи=значение...
  * @param test функция возвращающая ИСТИНУ если данный ключик надо экспортить, иначе ЛОЖЬ
  * @param $place элемент страницы в который будет добавлено текстовое поле для вывода
@@ -1044,7 +1120,7 @@ function Export($place, test) {
         return false;
     if ($place.find("#txtExport").length > 0) {
         $place.find("#txtExport").remove();
-        return;
+        return false;
     }
     let $txt = $('<textarea id="txtExport" style="display:block;width: 800px; height: 200px"></textarea>');
     let string = "";
@@ -1071,7 +1147,7 @@ function Import($place) {
     if ($place.find("#txtImport").length > 0) {
         $place.find("#txtImport").remove();
         $place.find("#saveImport").remove();
-        return;
+        return false;
     }
     let $txt = $('<textarea id="txtImport" style="display:block;width: 800px; height: 200px"></textarea>');
     let $saveBtn = $(`<input id="saveImport" type=button disabled="true" value="Save!">`);
@@ -1106,6 +1182,7 @@ function Import($place) {
     return true;
 }
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
+let Realm = getRealmOrError();
 var Modes;
 (function (Modes) {
     Modes[Modes["none"] = 0] = "none";
@@ -1388,24 +1465,38 @@ function updateEff_async($rows) {
             $r.attr("data-subid", subid);
             $r.addClass("processing");
         });
-        // запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
-        yield getEff_async(subids, (dict) => {
-            for (let key in dict) {
-                let subid = parseInt(key);
-                let percent = dict[subid];
-                let $r = $rows.filter(`tr[data-subid=${subid}]`);
-                if ($r.length != 1)
-                    throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
-                // выставляем значение в ячейку
-                let color = (percent >= 100 ? 'green' : 'red');
-                oneOrError($r, "td.prod")
-                    .html(percent.toFixed(2) + "<i>%</i>")
-                    .css('color', color);
-                // зачищаем ненужные данные со строки
-                $r.removeAttr("data-subid");
-                $r.removeClass("processing");
-            }
-        });
+        for (let subid of subids) {
+            let percent = yield xforecast_async(subid);
+            let $r = $rows.filter(`tr[data-subid=${subid}]`);
+            if ($r.length != 1)
+                throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+            // выставляем значение в ячейку
+            let color = (percent >= 100 ? 'green' : 'red');
+            oneOrError($r, "td.prod")
+                .html(percent.toFixed(2) + "<i>%</i>")
+                .css('color', color);
+            // зачищаем ненужные данные со строки
+            $r.removeAttr("data-subid");
+            $r.removeClass("processing");
+        }
+        //// запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
+        //await getEff_async(subids, (dict) => {
+        //    for (let key in dict) {
+        //        let subid = parseInt(key);
+        //        let percent = dict[subid];
+        //        let $r = $rows.filter(`tr[data-subid=${subid}]`);
+        //        if ($r.length != 1)
+        //            throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+        //        // выставляем значение в ячейку
+        //        let color = (percent >= 100 ? 'green' : 'red');
+        //        oneOrError($r, "td.prod")
+        //            .html(percent.toFixed(2) + "<i>%</i>")
+        //            .css('color', color);
+        //        // зачищаем ненужные данные со строки
+        //        $r.removeAttr("data-subid");
+        //        $r.removeClass("processing");
+        //    }
+        //});
     });
 }
 /**
@@ -1442,6 +1533,18 @@ function getEff_async(subids, onPartDone) {
             }
             onPartDone(res);
         } while (part.length > 0);
+    });
+}
+/**
+ * запрос прогноза для 1 юнита ajax
+ * @param subid
+ */
+function xforecast_async(subid) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let data = yield tryPostJSON_async(`/${Realm}/ajax/unit/forecast`, { 'unit_id': subid });
+        if (data['productivity'] == null)
+            throw new Error("Не пришли данные по продуктивности для юнита " + subid);
+        return Math.min(data['productivity'], 1) * 100;
     });
 }
 function parseUnits($rows, mode) {
@@ -1626,4 +1729,3 @@ function makeRegTownDict(units) {
     return res;
 }
 $(document).ready(() => run());
-//# sourceMappingURL=management.user.js.map

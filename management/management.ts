@@ -1,6 +1,7 @@
 ﻿
 /// <reference path= "../../_jsHelper/jsHelper/jsHelper.ts" />
 
+let Realm = getRealmOrError();
 
 interface INameValueCount {
     Name: string;
@@ -380,27 +381,46 @@ async function updateEff_async($rows: JQuery) {
         $r.addClass("processing");
     });
 
-    // запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
-    await getEff_async(subids, (dict) => {
-        for (let key in dict) {
-            let subid = parseInt(key);
-            let percent = dict[subid];
 
-            let $r = $rows.filter(`tr[data-subid=${subid}]`);
-            if ($r.length != 1)
-                throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+    for (let subid of subids) {
+        let percent = await xforecast_async(subid);
 
-            // выставляем значение в ячейку
-            let color = (percent >= 100 ? 'green' : 'red');
-            oneOrError($r, "td.prod")
-                .html(percent.toFixed(2) + "<i>%</i>")
-                .css('color', color);
+        let $r = $rows.filter(`tr[data-subid=${subid}]`);
+        if ($r.length != 1)
+            throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
 
-            // зачищаем ненужные данные со строки
-            $r.removeAttr("data-subid");
-            $r.removeClass("processing");
-        }
-    });
+        // выставляем значение в ячейку
+        let color = (percent >= 100 ? 'green' : 'red');
+        oneOrError($r, "td.prod")
+            .html(percent.toFixed(2) + "<i>%</i>")
+            .css('color', color);
+
+        // зачищаем ненужные данные со строки
+        $r.removeAttr("data-subid");
+        $r.removeClass("processing");
+    }
+
+    //// запрашиваем эффективность по каждому юниту и обновляем данные на странице по мере прихода
+    //await getEff_async(subids, (dict) => {
+    //    for (let key in dict) {
+    //        let subid = parseInt(key);
+    //        let percent = dict[subid];
+
+    //        let $r = $rows.filter(`tr[data-subid=${subid}]`);
+    //        if ($r.length != 1)
+    //            throw new Error("что то пошло не так. нашел много строк с subid:" + subid);
+
+    //        // выставляем значение в ячейку
+    //        let color = (percent >= 100 ? 'green' : 'red');
+    //        oneOrError($r, "td.prod")
+    //            .html(percent.toFixed(2) + "<i>%</i>")
+    //            .css('color', color);
+
+    //        // зачищаем ненужные данные со строки
+    //        $r.removeAttr("data-subid");
+    //        $r.removeClass("processing");
+    //    }
+    //});
 }
 
 /**
@@ -442,6 +462,19 @@ async function getEff_async(subids: number[], onPartDone: IAction1<IDictionaryN<
         onPartDone(res);
 
     } while (part.length > 0);
+}
+
+/**
+ * запрос прогноза для 1 юнита ajax
+ * @param subid
+ */
+async function xforecast_async(subid: number): Promise<number> {
+
+    let data = await tryPostJSON_async(`/${Realm}/ajax/unit/forecast`, { 'unit_id': subid });
+    if (data['productivity'] == null)
+        throw new Error("Не пришли данные по продуктивности для юнита " + subid);
+
+    return Math.min(data['productivity'], 1) * 100;
 }
 
 function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
