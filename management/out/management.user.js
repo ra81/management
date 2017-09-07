@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.82
+// @version 	   1.83
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -868,7 +868,7 @@ function tryGet(url, retries = 10, timeout = 1000) {
  */
 function tryGet_async(url, retries = 10, timeout = 1000, beforeGet, onError) {
     return __awaiter(this, void 0, void 0, function* () {
-        logDebug(`tryGet_async: ${url}`);
+        //logDebug(`tryGet_async: ${url}`);
         // сам метод пришлось делать Promise<any> потому что string | Error не работало какого то хуя не знаю. Из за стрик нулл чек
         let $deffered = $.Deferred();
         if (beforeGet) {
@@ -1091,7 +1091,7 @@ function buildStoreKey(realm, code, subid) {
     return res;
 }
 /**
- * Возвращает все ключи юнитов для заданного реалма и КОДА.
+ * Возвращает все ключи ЮНИТОВ для заданного реалма и КОДА.
  * @param realm
  * @param storeKey код ключа sh, udd, vh итд
  */
@@ -1107,6 +1107,26 @@ function getStoredUnitsKeys(realm, storeKey) {
         if (key !== buildStoreKey(realm, storeKey, subid))
             continue;
         res.push(key);
+    }
+    return res;
+}
+/**
+ * Возвращает все ключи ЮНИТОВ для заданного реалма и КОДА. А так же subid юнита отдельно
+ * @param realm
+ * @param storeKey код ключа sh, udd, vh итд
+ */
+function getStoredUnitsKeysA(realm, storeKey) {
+    let res = [];
+    for (let key in localStorage) {
+        // если в ключе нет числа, не брать его
+        let m = extractIntPositive(key);
+        if (m == null)
+            continue;
+        // если ключик не совпадает со старым ключем для посетителей
+        let subid = m[0];
+        if (key !== buildStoreKey(realm, storeKey, subid))
+            continue;
+        res.push([key, subid]);
     }
     return res;
 }
@@ -1376,8 +1396,8 @@ function run() {
             .append('<option value=0>0%</option>');
         // фильтр по тегм
         let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
-        let taggedUnits = units.filter((val, i, arr) => val.Tag.length > 0);
-        let tags = makeKeyValCount(taggedUnits, (el) => el.Tag);
+        let taggedUnits = units.filter((val, i, arr) => val.Tags.length > 0);
+        let tags = makeKeyValCountArr(taggedUnits, (el) => el.Tags);
         tagFilter.append(buildOptions(tags));
         // текстовый фильтр
         let textFilter = $("<input id='textFilter' class='option' style='width:50%;'></input>").attr({ type: 'text', value: '(?=.*)' });
@@ -1602,15 +1622,15 @@ function parseUnits($rows, mode) {
             searchStr += " " + eff;
         }
         // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
-        // спарсим тег, либо "" если его нет
-        let tg = tag(name);
+        // спарсим теги, либо [] если его нет
+        let tgs = parseTag(name);
         units.push({
             $row: $r,
             Id: id,
             Region: reg,
             Town: twn,
             Name: name,
-            Tag: tg,
+            Tags: tgs,
             Url: url,
             Type: type,
             Goods: goods,
@@ -1622,11 +1642,27 @@ function parseUnits($rows, mode) {
     }
     return units;
 }
-// выделяет из строки так вида tag#чтотоеще. Если такого нет возвращает ""
-function tag(str) {
-    let rx = /^([a-z,0-9]+)#.+/i;
-    let items = rx.exec(str);
-    return items ? items[1] : "";
+/**
+ * извлекает из строки все содержащиеся в ней теги.
+   Теги всегда в начале строки, всегда заканчиваются хештегом,
+    тэги могут содержать цифробуквы без пробелов, но начинаются всегда с буквы. регистр не важен
+    число тегов в строке не ограничено.
+   Если тегов нет вернет пустой массив.
+ * @param str Строка вида direct# goods# service# склад >> город
+ */
+function parseTag(str) {
+    let rx = /^(?:(?:[a-z,а-я]+\w*)#\s*)+/i;
+    let items = rx.exec(str.toLowerCase());
+    if (items == null)
+        return [];
+    let res = [];
+    let tags = items[0].split("#");
+    for (let i = 0; i < tags.length; i++) {
+        let tag = tags[i].trim();
+        if (tag.length > 0)
+            res.push(tag);
+    }
+    return res;
 }
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
 function filter(units, options, mode) {
@@ -1641,7 +1677,7 @@ function filter(units, options, mode) {
             continue;
         if (options.Type != "all" && unit.Type != options.Type)
             continue;
-        if (options.Tag != "all" && unit.Tag != options.Tag)
+        if (options.Tag != "all" && isOneOf(options.Tag, unit.Tags) == false)
             continue;
         if (textRx.test(unit.SearchString) === false)
             continue;
@@ -1704,6 +1740,30 @@ function makeKeyValCount(items, keySelector, valueSelector) {
             res[key].Count++;
         else
             res[key] = { Name: key, Value: val, Count: 1 };
+    }
+    let resArray = [];
+    for (let key in res)
+        resArray.push(res[key]);
+    resArray.sort(function (a, b) {
+        if (a.Name > b.Name)
+            return 1;
+        if (a.Name < b.Name)
+            return -1;
+        return 0;
+    });
+    return resArray;
+}
+function makeKeyValCountArr(items, keySelector) {
+    let res = {};
+    for (let i = 0; i < items.length; i++) {
+        let keys = keySelector(items[i]);
+        for (let key of keys) {
+            let val = key;
+            if (res[key] != null)
+                res[key].Count++;
+            else
+                res[key] = { Name: key, Value: val, Count: 1 };
+        }
     }
     let resArray = [];
     for (let key in res)

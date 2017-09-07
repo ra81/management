@@ -18,7 +18,7 @@ interface IUnit {
     Region: string;
     Town: string;
     Name: string;
-    Tag: string;
+    Tags: string[];
     Url: string;
     Type: string;
     Goods: INameUrl[];
@@ -271,8 +271,8 @@ function run() {
 
         // фильтр по тегм
         let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
-        let taggedUnits = units.filter((val, i, arr) => val.Tag.length > 0);
-        let tags = makeKeyValCount<IUnit>(taggedUnits, (el) => el.Tag);
+        let taggedUnits = units.filter((val, i, arr) => val.Tags.length > 0);
+        let tags = makeKeyValCountArr<IUnit>(taggedUnits, (el) => el.Tags);
         tagFilter.append(buildOptions(tags));
 
         // текстовый фильтр
@@ -544,8 +544,8 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
         }
 
         // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
-        // спарсим тег, либо "" если его нет
-        let tg = tag(name);
+        // спарсим теги, либо [] если его нет
+        let tgs = parseTag(name);
 
         units.push({
             $row: $r,
@@ -553,7 +553,7 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
             Region: reg,
             Town: twn,
             Name: name,
-            Tag: tg,
+            Tags: tgs,
             Url: url,
             Type: type,
             Goods: goods,
@@ -567,12 +567,31 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
     return units;
 }
 
-// выделяет из строки так вида tag#чтотоеще. Если такого нет возвращает ""
-function tag(str: string): string {
-    let rx = /^([a-z,0-9]+)#.+/i;
-    let items = rx.exec(str);
-    return items ? items[1] : "";
+/**
+ * извлекает из строки все содержащиеся в ней теги. 
+   Теги всегда в начале строки, всегда заканчиваются хештегом,
+    тэги могут содержать цифробуквы без пробелов, но начинаются всегда с буквы. регистр не важен
+    число тегов в строке не ограничено.
+   Если тегов нет вернет пустой массив.
+ * @param str Строка вида direct# goods# service# склад >> город
+ */
+function parseTag(str: string): string[] {
+
+    let rx = /^(?:(?:[a-z,а-я]+\w*)#\s*)+/i;
+    let items = rx.exec(str.toLowerCase());
+    if (items == null)
+        return [];
+
+    let res: string[] = [];
+    let tags = items[0].split("#");
+    for (let i = 0; i < tags.length; i++) {
+        let tag = tags[i].trim();
+        if (tag.length > 0)
+            res.push(tag);
+    }
+    return res;
 }
+
 
 // возвращает массив равный числу юнитов. В ячейке true если юнита надо показывать. иначе false
 function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
@@ -592,7 +611,7 @@ function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
         if (options.Type != "all" && unit.Type != options.Type)
             continue;
 
-        if (options.Tag != "all" && unit.Tag != options.Tag)
+        if (options.Tag != "all" && isOneOf(options.Tag, unit.Tags) == false)
             continue;
 
         if (textRx.test(unit.SearchString) === false)
@@ -672,6 +691,37 @@ function makeKeyValCount<T>(items: T[], keySelector: (el: T) => string, valueSel
             res[key].Count++;
         else
             res[key] = { Name: key, Value: val, Count: 1 };
+    }
+
+    let resArray: INameValueCount[] = [];
+    for (let key in res)
+        resArray.push(res[key]);
+
+    resArray.sort(function (a, b) {
+        if (a.Name > b.Name)
+            return 1;
+
+        if (a.Name < b.Name)
+            return -1;
+
+        return 0;
+    });
+
+    return resArray;
+}
+
+function makeKeyValCountArr<T>(items: T[], keySelector: (el: T) => string[]) {
+
+    let res: IDictionary<INameValueCount> = {};
+    for (let i = 0; i < items.length; i++) {
+        let keys = keySelector(items[i]);
+        for (let key of keys) {
+            let val = key;
+            if (res[key] != null)
+                res[key].Count++;
+            else
+                res[key] = { Name: key, Value: val, Count: 1 };
+        }
     }
 
     let resArray: INameValueCount[] = [];
