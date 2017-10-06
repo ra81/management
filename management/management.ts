@@ -21,6 +21,7 @@ interface IUnit {
     Tags: string[];
     Url: string;
     Type: string;
+    Size: number;
     Goods: INameUrl[];
     Problems: INameUrl[];
     Efficiency: number;
@@ -31,7 +32,8 @@ interface IFilterOptions {
     Region: string;
     Town: string;
     Type: string;
-    Tag: string,
+    Size: number;
+    Tag: string;
     TextRx: string;
     GoodUrl: string;
     ProblemUrl: string;
@@ -269,6 +271,11 @@ function run() {
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
 
+        // фильтр по размеру
+        let sizeFilter = $("<select id='sizeFilter' class='option' style='max-width:120px;'>");
+        let sizes = makeKeyValCount<IUnit>(units, el => el.Size.toString());
+        sizeFilter.append(buildOptions(sizes));
+
         // фильтр по тегм
         let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
         let taggedUnits = units.filter((val, i, arr) => val.Tags.length > 0);
@@ -343,6 +350,7 @@ function run() {
             $r1.append("<span> </span>").append(effButton);
         }
 
+        $r2.append("<span> Разм: </span>").append(sizeFilter);
         $r2.append("<span> Тэг#: </span>").append(tagFilter);
         $r2.append("<span> Rx: </span>").append(textFilter);
         $r2.append("<span id='rows' style='color: blue;'></span>");
@@ -542,10 +550,17 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
             eff = numberfy($eff.clone().children().remove().end().text());
             searchStr += " " + eff;
         }
-
+        
         // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
         // спарсим теги, либо [] если его нет
         let tgs = parseTag(name);
+
+        // размер предприятия
+        let size = 0;
+        if (mode == Modes.self)
+            size = oneOrError($r, "td.size").find("div.graybox").length;
+        else if (mode == Modes.other)
+            size = oneOrError($r, "td.size").find("img").length;
 
         units.push({
             $row: $r,
@@ -556,6 +571,7 @@ function parseUnits($rows: JQuery, mode: Modes): IUnit[] {
             Tags: tgs,
             Url: url,
             Type: type,
+            Size: size,
             Goods: goods,
             Problems: problems,
             Efficiency: eff,
@@ -620,6 +636,9 @@ function filter(units: IUnit[], options: IFilterOptions, mode: Modes) {
         if (options.GoodUrl != "all" && !unit.Goods.some((e) => e.Url === options.GoodUrl))
             continue;
 
+        if (options.Size != -1 && unit.Size != options.Size)
+            continue;
+
         if (mode === Modes.self) {
 
             if (options.ProblemUrl != "all" && !unit.Problems.some((e) => e.Url === options.ProblemUrl))
@@ -655,6 +674,7 @@ function getFilterOptions($panel: JQuery, mode: Modes): IFilterOptions {
         Town: $panel.find("#townFilter").val(),
         Type: $panel.find("#typeFilter").val(),
         Tag: $panel.find("#tagFilter").val(),
+        Size: numberfy($panel.find("#sizeFilter").val()),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
         GoodUrl: $panel.find("#goodsFilter").val(),
         ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
@@ -679,6 +699,7 @@ function getProblems(units: IUnit[]) {
 
     return makeKeyValCount(problems, (el) => el.Name, (el) => el.Url);
 }
+
 
 function makeKeyValCount<T>(items: T[], keySelector: (el: T) => string, valueSelector?: (el: T) => string) {
 

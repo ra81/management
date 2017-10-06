@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 // ==UserScript==
 // @name           Virtonomica: management
 // @namespace      https://github.com/ra81/management
-// @version 	   1.83
+// @version 	   1.84
 // @description    Добавление нового функционала к управлению предприятиями
 // @include        https://*virtonomic*.*/*/main/company/view/*
 // @include        https://*virtonomic*.*/*/window/company/view/*
@@ -427,6 +427,12 @@ function extractDate(str) {
     let y = parseInt(m[3]);
     return new Date(y, mon, d);
 }
+function extractDateOrError(str) {
+    let dt = extractDate(str);
+    if (dt == null)
+        throw new Error(`Не получилось извлечь дату из "${str}"`);
+    return dt;
+}
 /**
  * из даты формирует короткую строку типа 01.12.2017
  * @param date
@@ -546,6 +552,15 @@ function formatStr(str, ...args) {
     });
     return res;
 }
+/**
+ * если значение null то вывалит ошибку, иначе вернет само значение. Короткий метод для проверок на нулл
+ * @param val
+ */
+function nullCheck(val) {
+    if (val == null)
+        throw new Error(`nullCheck Error`);
+    return val;
+}
 // РЕГУЛЯРКИ ДЛЯ ССЫЛОК ------------------------------------
 // для 1 юнита
 // 
@@ -571,6 +586,7 @@ let url_manag_empl_rx = /\/[a-z]+\/main\/company\/view\/\d+\/unit_list\/employee
 // 
 let url_global_products_rx = /[a-z]+\/main\/globalreport\/marketing\/by_products\/\d+\/?$/i; // глобальный отчет по продукции из аналитики
 let url_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/products$/i; // страница со всеми товарами игры
+let url_trade_products_rx = /\/[a-z]+\/main\/common\/main_page\/game_info\/trading$/i; // страница с торгуемыми товарами
 let url_city_retail_report_rx = /\/[a-z]+\/(?:main|window)\/globalreport\/marketing\/by_trade_at_cities\/\d+/i; // розничный отчет по конкретному товару
 let url_products_size_rx = /\/[a-z]+\/main\/industry\/unit_type\/info\/2011\/volume\/?/i; // размеры продуктов на склада
 let url_country_duties_rx = /\/[a-z]+\/main\/geo\/countrydutylist\/\d+\/?/i; // таможенные пошлины и ИЦ
@@ -1155,6 +1171,25 @@ function Export($place, test) {
     $place.append($txt);
     return true;
 }
+function ExportA($place, keys, converter, delim = "\n") {
+    if ($place.length <= 0)
+        return false;
+    if ($place.find("#txtExport").length > 0) {
+        $place.find("#txtExport").remove();
+        return false;
+    }
+    let $txt = $('<textarea id="txtExport" style="display:block;width: 800px; height: 200px"></textarea>');
+    let exportStr = "";
+    for (let key of keys) {
+        if (exportStr.length > 0)
+            exportStr += delim;
+        let item = converter == null ? localStorage[key] : converter(localStorage[key]);
+        exportStr += `${key}=${item}`;
+    }
+    $txt.text(exportStr);
+    $place.append($txt);
+    return true;
+}
 /**
  * Импортирует в кэш данные введенные к текстовое окно. Формат данных такой же как в экспорте
  * Ключ=Значение|Ключ=Значение итд.
@@ -1187,9 +1222,49 @@ function Import($place) {
                 let storeVal = kvp[1].trim();
                 if (storeKey.length <= 0 || storeVal.length <= 0)
                     throw new Error("Длина ключа или данных равна 0 " + item);
-                if (localStorage[storeKey])
+                if (localStorage[storeKey] != null)
                     logDebug(`Ключ ${storeKey} существует. Перезаписываем.`);
                 localStorage[storeKey] = storeVal;
+            });
+            alert("импорт завершен");
+        }
+        catch (err) {
+            let msg = err.message;
+            alert(msg);
+        }
+    });
+    $place.append($txt).append($saveBtn);
+    return true;
+}
+function ImportA($place, converter, delim = "\n") {
+    if ($place.length <= 0)
+        return false;
+    if ($place.find("#txtImport").length > 0) {
+        $place.find("#txtImport").remove();
+        $place.find("#saveImport").remove();
+        return false;
+    }
+    let $txt = $('<textarea id="txtImport" style="display:block;width: 800px; height: 200px"></textarea>');
+    let $saveBtn = $(`<input id="saveImport" type=button disabled="true" value="Save!">`);
+    $txt.on("input propertychange", (event) => $saveBtn.prop("disabled", false));
+    $saveBtn.on("click", (event) => {
+        let items = $txt.val().split(delim); // элементы вида Ключ=значение
+        logDebug(`загружено ${items.length} элементов`);
+        try {
+            items.forEach((val, i, arr) => {
+                let item = val.trim();
+                if (item.length <= 0)
+                    throw new Error(`получили пустую строку для элемента ${i}, невозможно импортировать.`);
+                let kvp = item.split("="); // пара ключ значение
+                if (kvp.length !== 2)
+                    throw new Error("Должен быть только ключ и значение а по факту не так. " + item);
+                let storeKey = kvp[0].trim();
+                let storeVal = kvp[1].trim();
+                if (storeKey.length <= 0 || storeVal.length <= 0)
+                    throw new Error("Длина ключа или данных равна 0 " + item);
+                if (localStorage[storeKey] != null)
+                    logDebug(`Ключ ${storeKey} существует. Перезаписываем.`);
+                localStorage[storeKey] = converter == null ? storeVal : converter(storeVal);
             });
             alert("импорт завершен");
         }
@@ -1394,6 +1469,10 @@ function run() {
             .append('<option value=100>100%</option>') // ТОЛЬКО 100%
             .append('<option value=10>< 100%</option>') // [0, 100%) - нерабочие НЕ выводить
             .append('<option value=0>0%</option>');
+        // фильтр по размеру
+        let sizeFilter = $("<select id='sizeFilter' class='option' style='max-width:120px;'>");
+        let sizes = makeKeyValCount(units, el => el.Size.toString());
+        sizeFilter.append(buildOptions(sizes));
         // фильтр по тегм
         let tagFilter = $("<select id='tagFilter' class='option' style='max-width:120px;'>");
         let taggedUnits = units.filter((val, i, arr) => val.Tags.length > 0);
@@ -1456,6 +1535,7 @@ function run() {
             $r1.append("<span> Эф: </span>").append(efficiencyFilter);
             $r1.append("<span> </span>").append(effButton);
         }
+        $r2.append("<span> Разм: </span>").append(sizeFilter);
         $r2.append("<span> Тэг#: </span>").append(tagFilter);
         $r2.append("<span> Rx: </span>").append(textFilter);
         $r2.append("<span id='rows' style='color: blue;'></span>");
@@ -1624,6 +1704,12 @@ function parseUnits($rows, mode) {
         // для юнитов можно в имени ставить тег вида gas#чтото еще дальше
         // спарсим теги, либо [] если его нет
         let tgs = parseTag(name);
+        // размер предприятия
+        let size = 0;
+        if (mode == Modes.self)
+            size = oneOrError($r, "td.size").find("div.graybox").length;
+        else if (mode == Modes.other)
+            size = oneOrError($r, "td.size").find("img").length;
         units.push({
             $row: $r,
             Id: id,
@@ -1633,6 +1719,7 @@ function parseUnits($rows, mode) {
             Tags: tgs,
             Url: url,
             Type: type,
+            Size: size,
             Goods: goods,
             Problems: problems,
             Efficiency: eff,
@@ -1683,6 +1770,8 @@ function filter(units, options, mode) {
             continue;
         if (options.GoodUrl != "all" && !unit.Goods.some((e) => e.Url === options.GoodUrl))
             continue;
+        if (options.Size != -1 && unit.Size != options.Size)
+            continue;
         if (mode === Modes.self) {
             if (options.ProblemUrl != "all" && !unit.Problems.some((e) => e.Url === options.ProblemUrl))
                 continue;
@@ -1713,6 +1802,7 @@ function getFilterOptions($panel, mode) {
         Town: $panel.find("#townFilter").val(),
         Type: $panel.find("#typeFilter").val(),
         Tag: $panel.find("#tagFilter").val(),
+        Size: numberfy($panel.find("#sizeFilter").val()),
         TextRx: $panel.find("#textFilter").val().toLowerCase(),
         GoodUrl: $panel.find("#goodsFilter").val(),
         ProblemUrl: mode === Modes.self ? $panel.find("#problemsFilter").val() : "",
